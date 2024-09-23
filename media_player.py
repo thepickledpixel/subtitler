@@ -1,60 +1,37 @@
 import sys
 import json
 import cv2  # For reading frame rate
-from PyQt6.QtWidgets import *
+from PyQt6.QtWidgets import (
+    QApplication, QWidget, QPushButton, QSlider, QHBoxLayout, QVBoxLayout, QLabel,
+    QFileDialog, QListWidget, QListWidgetItem, QFormLayout, QDialog, QTimeEdit, QLineEdit, QSplitter, QStyle
+)
 from PyQt6.QtMultimedia import QMediaPlayer, QAudioOutput
 from PyQt6.QtMultimediaWidgets import QVideoWidget
-from PyQt6.QtCore import QUrl, Qt, QTimer, QTime, QRect
-from PyQt6.QtGui import QPainter, QPen, QColor, QFont
+from PyQt6.QtCore import QUrl, Qt, QTimer, QTime
+from PyQt6.QtGui import QFont
 
-class SubtitleOverlay(QWidget):
-    def __init__(self, parent=None):
-        super().__init__(parent)
-        self.subtitle = ""
-        self.setAttribute(Qt.WidgetAttribute.WA_TransparentForMouseEvents)
-        self.setWindowFlags(Qt.WindowType.FramelessWindowHint)
-        self.setAttribute(Qt.WidgetAttribute.WA_NoSystemBackground, True)
-        self.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground, True)
-
-    def setSubtitle(self, subtitle):
-        self.subtitle = subtitle
-        self.update()
-
-    def paintEvent(self, event):
-        if not self.subtitle:
-            return
-
-        painter = QPainter(self)
-        painter.setPen(QColor(255, 255, 255))  # White text
-        painter.setFont(QFont("Courier", 20, QFont.Weight.Bold))
-
-        # Draw the subtitle text at the bottom center of the video
-        text_rect = self.rect().adjusted(0, self.height() - 60, 0, -10)
-        painter.drawText(text_rect, Qt.AlignmentFlag.AlignCenter, self.subtitle)
-        painter.end()
 
 class EditSubtitleDialog(QDialog):
     def __init__(self, subtitle, parent=None):
         super().__init__(parent)
         self.setWindowTitle("Edit Subtitle")
-        self.resize(400, 200)  # Adjust size to be more spacious
+        self.resize(400, 200)
 
-        # Create fields for editing
         self.start_time_edit = QTimeEdit(QTime.fromString(subtitle['start'], 'hh:mm:ss.zzz'))
         self.end_time_edit = QTimeEdit(QTime.fromString(subtitle['end'], 'hh:mm:ss.zzz'))
-        self.text_edit = QLineEdit(subtitle['text'])
+        self.start_time_edit.setDisplayFormat("hh:mm:ss.zzz")
+        self.end_time_edit.setDisplayFormat("hh:mm:ss.zzz")
 
+        self.text_edit = QLineEdit(subtitle['text'])
         self.start_time_edit.setFixedWidth(150)
         self.end_time_edit.setFixedWidth(150)
         self.text_edit.setFixedWidth(300)
 
-        # Layout for the dialog
         layout = QFormLayout()
         layout.addRow("Start Time:", self.start_time_edit)
         layout.addRow("End Time:", self.end_time_edit)
         layout.addRow("Text:", self.text_edit)
 
-        # OK and Cancel buttons
         ok_button = QPushButton("OK")
         cancel_button = QPushButton("Cancel")
         ok_button.clicked.connect(self.accept)
@@ -69,6 +46,7 @@ class EditSubtitleDialog(QDialog):
             'end': self.end_time_edit.time().toString('hh:mm:ss.zzz'),
             'text': self.text_edit.text()
         }
+
 
 class SubtitleWidget(QWidget):
     def __init__(self, start, end, text):
@@ -90,6 +68,7 @@ class SubtitleWidget(QWidget):
 
         self.setLayout(layout)
 
+
 class VideoPlayer(QWidget):
     def __init__(self):
         super().__init__()
@@ -103,10 +82,14 @@ class VideoPlayer(QWidget):
         self.videoWidget = QVideoWidget()
         self.videoWidget.setStyleSheet("background-color: black;")
 
-        # Subtitle Overlay Widget (on top of the video widget)
-        self.subtitleOverlay = SubtitleOverlay(self.videoWidget)
+        # Subtitle Display Box
+        self.subtitleBox = QLabel("Subtitles will be displayed here.")
+        self.subtitleBox.setStyleSheet("background-color: black; color: white; padding: 5px;")
+        self.subtitleBox.setFont(QFont("Monospace", 18))
+        self.subtitleBox.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self.subtitleBox.setFixedHeight(30)  # Fixed height to show two rows of text
 
-        # Open Button with folder icon
+        # Open Button
         openButton = QPushButton()
         openButton.setIcon(self.style().standardIcon(QStyle.StandardPixmap.SP_DirOpenIcon))
         openButton.clicked.connect(self.openFile)
@@ -151,10 +134,10 @@ class VideoPlayer(QWidget):
         self.styleButton(frameBackwardButton, double_width=True)
 
         # Timecode Label
-        self.timecodeLabel = QLabel("00:00:00:00 (24fps)")
+        self.timecodeLabel = QLabel("00:00:00:000")
         self.timecodeLabel.setStyleSheet("background-color: black; color: white; padding: 0 10px;")
-        self.timecodeLabel.setFont(QFont("Courier", 16))  # Using Courier for timecode
-        self.timecodeLabel.setFixedHeight(50)  # Match the height of the buttons
+        self.timecodeLabel.setFont(QFont("Monospace", 16))
+        self.timecodeLabel.setFixedHeight(50)
         self.timecodeLabel.setAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
 
         # Slider
@@ -193,6 +176,7 @@ class VideoPlayer(QWidget):
         # Main layout
         layout = QVBoxLayout()
         layout.addWidget(splitter)
+        layout.addWidget(self.subtitleBox)
         layout.addWidget(self.slider)
         layout.addLayout(bottomLayout)
         layout.setSpacing(10)
@@ -218,21 +202,7 @@ class VideoPlayer(QWidget):
         self.frame_rate = 24  # Default frame rate
         self.subtitles = []   # Store subtitles from JSON
         self.currentSubtitle = ""
-
-        # Make sure subtitle overlay resizes with video
-        self.videoWidget.installEventFilter(self)
-
-        # Media Player Settings
-        self.mediaPlayer.setVideoOutput(self.videoWidget)
-        self.mediaPlayer.mediaStatusChanged.connect(self.updateButtons)
-        self.mediaPlayer.positionChanged.connect(self.updatePosition)
-        self.mediaPlayer.durationChanged.connect(self.updateDuration)
-
-
-    def eventFilter(self, watched, event):
-        if watched == self.videoWidget and event.type() == event.Type.Resize:
-            self.subtitleOverlay.resize(self.videoWidget.size())
-        return super().eventFilter(watched, event)
+        self.edit_dialog = None
 
     def styleButton(self, button, double_width=False):
         width = 100 if double_width else 50
@@ -264,12 +234,7 @@ class VideoPlayer(QWidget):
             self.frame_rate = video.get(cv2.CAP_PROP_FPS)
             video.release()
 
-            # Update the timecode with the correct frame rate
-            self.updateTimecode()
-            self.videoWidget.update()  # Force update to redraw the green box
-
     def loadSubtitles(self):
-        # Load subtitle file in JSON format
         fileName, _ = QFileDialog.getOpenFileName(self, "Open Subtitles File", "", "Subtitle Files (*.json)")
         if fileName:
             with open(fileName, 'r') as file:
@@ -291,16 +256,14 @@ class VideoPlayer(QWidget):
         row = self.subtitleList.row(item)
         subtitle = self.subtitles[row]
 
-        if not hasattr(self, 'edit_dialog') or not self.edit_dialog.isVisible():
+        if not hasattr(self, 'edit_dialog') or not self.edit_dialog or not self.edit_dialog.isVisible():
             self.edit_dialog = EditSubtitleDialog(subtitle, self)
-            if self.edit_dialog.exec():
+            result = self.edit_dialog.exec()  # Wait for dialog interaction
+
+            if result == QDialog.DialogCode.Accepted:
                 updated_values = self.edit_dialog.getValues()
-
-                # Update the subtitle in the list
-                self.subtitles[row] = updated_values
-
-                # Refresh the list to show updated values
-                self.populateSubtitleList()
+                self.subtitles[row] = updated_values  # Update the subtitle in the list
+                self.populateSubtitleList()  # Refresh the list
 
     def highlightCurrentSubtitle(self, position):
         current_time = QTime(0, 0, 0).addMSecs(position)
@@ -312,7 +275,6 @@ class VideoPlayer(QWidget):
                 break
 
     def getSubtitleForTime(self, position):
-        # Find the correct subtitle for the current position (in ms)
         current_time = QTime(0, 0, 0).addMSecs(position)
         for subtitle in self.subtitles:
             start_time = QTime.fromString(subtitle['start'], 'hh:mm:ss.zzz')
@@ -379,56 +341,23 @@ class VideoPlayer(QWidget):
         self.slider.setRange(0, duration)
 
     def updateButtons(self, status):
-        # Update button icons based on playback state
         if self.mediaPlayer.playbackState() == QMediaPlayer.PlaybackState.PlayingState:
             self.playButton.setIcon(self.style().standardIcon(QStyle.StandardPixmap.SP_MediaPause))
         else:
             self.playButton.setIcon(self.style().standardIcon(QStyle.StandardPixmap.SP_MediaPlay))
 
-
     def updateTimecode(self, position=None):
         if position is None:
             position = self.mediaPlayer.position()
 
-        # Convert position (in ms) to HH:MM:SS:FF
         time = QTime(0, 0, 0).addMSecs(position)
-        hours = time.hour()
-        minutes = time.minute()
-        seconds = time.second()
-        milliseconds = time.msec()
-
-        # Convert milliseconds to frames based on frame rate
-        frames = int((milliseconds / 1000) * self.frame_rate)
-
-        timecode = f'{hours:02}:{minutes:02}:{seconds:02}:{frames:02} ({int(self.frame_rate)}fps)'
+        timecode = f'{time.hour():02}:{time.minute():02}:{time.second():02}:{time.msec():03}'
         self.timecodeLabel.setText(timecode)
 
-        # Update subtitle display
         self.currentSubtitle = self.getSubtitleForTime(position)
-        self.subtitleOverlay.setSubtitle(self.currentSubtitle)
+        self.subtitleBox.setText(self.currentSubtitle)  # Update subtitle in the display box
         self.highlightCurrentSubtitle(position)
 
-class VideoWidget(QVideoWidget):
-    def __init__(self, *args, **kwargs):
-        super().__init__(*args, **kwargs)
-        self.subtitle = ""
-
-    def setSubtitle(self, subtitle):
-        self.subtitle = subtitle
-        self.update()  # Ensure the widget is updated when the subtitle changes
-
-    def paintEvent(self, event):
-        super().paintEvent(event)
-        painter = QPainter(self)
-
-        # Draw subtitle text over the video
-        if self.subtitle:
-            painter.setPen(QPen(QColor(255, 255, 255)))
-            painter.setFont(QFont("Courier", 20, QFont.Weight.Bold))
-            text_rect = QRect(0, self.height() - 60, self.width(), 50)
-            painter.drawText(text_rect, Qt.AlignmentFlag.AlignCenter, self.subtitle)
-
-        painter.end()
 
 if __name__ == '__main__':
     app = QApplication(sys.argv)
