@@ -3,15 +3,45 @@ import sys
 import json
 import cv2  # For reading frame rate
 from PyQt6.QtWidgets import *
-from PyQt6.QtMultimedia import QMediaPlayer, QAudioOutput
+from PyQt6.QtMultimedia import QMediaPlayer, QAudioOutput, QMediaDevices, QAudioSink
 from PyQt6.QtMultimediaWidgets import QVideoWidget
-from PyQt6.QtCore import QUrl, Qt, QTimer, QTime
+from PyQt6.QtCore import QUrl, Qt, QTimer, QTime, QByteArray, QSize
 from PyQt6.QtGui import *
+
+import numpy as np
+import matplotlib.pyplot as plt
+from pydub import AudioSegment
+from io import BytesIO
+
 
 if getattr(sys, 'frozen', False):
     runpath = os.path.dirname(sys.executable)
 else:
     runpath = os.path.abspath(os.path.dirname(__file__))
+
+class ConfigureFonts():
+    def __init__(self):
+        # Load and set the custom font
+        font_id = QFontDatabase.addApplicationFont(
+            os.path.join(runpath, "Louis George Cafe.ttf")
+        )
+        if font_id == -1:
+            print("Failed to load the custom font. Falling back to default.")
+            font_family = QApplication.font().family()
+        else:
+            font_family = QFontDatabase.applicationFontFamilies(font_id)[0]
+        self.font = QFont(font_family)
+
+        # Load and set the custom font
+        mono_font_id = QFontDatabase.addApplicationFont(
+            os.path.join(runpath, "ConsolaMono-Book.ttf")
+        )
+        if mono_font_id == -1:
+            print("Failed to load the custom font. Falling back to default.")
+            mono_font_family = QApplication.font().family()
+        else:
+            mono_font_family = QFontDatabase.applicationFontFamilies(mono_font_id)[0]
+        self.mono_font = QFont(mono_font_family)
 
 class AddSubtitleDialog(QDialog):
     def __init__(self, start_time, default_end_time, parent=None):
@@ -19,32 +49,43 @@ class AddSubtitleDialog(QDialog):
         self.setWindowTitle("Add Subtitle")
         self.resize(400, 300)
 
+        fonts = ConfigureFonts()
+
+        new_font = QFont(fonts.font)  # Copy the current font
+        new_font.setPointSize(24)
+
         self.start_time_edit = QTimeEdit(QTime.fromString(start_time, 'hh:mm:ss.zzz'))
         self.end_time_edit = QTimeEdit(QTime.fromString(default_end_time, 'hh:mm:ss.zzz'))
         self.start_time_edit.setDisplayFormat("hh:mm:ss.zzz")
         self.end_time_edit.setDisplayFormat("hh:mm:ss.zzz")
+        self.end_time_edit.setFont(fonts.font)
+        self.start_time_edit.setFont(fonts.font)
 
         self.text_edit = QTextEdit()
         self.text_edit.setFixedWidth(300)
         self.text_edit.setFixedHeight(200)
+        self.text_edit.setFont(new_font)
         self.text_edit.setWordWrapMode(QTextOption.WrapMode.WordWrap)
 
         self.auto_end_checkbox = QCheckBox("Auto-adjust end time based on 1 sec/word")
         self.auto_end_checkbox.setChecked(True)
 
         layout = QFormLayout()
-        layout.addRow("Start Time:", self.start_time_edit)
-        layout.addRow("End Time:", self.end_time_edit)
-        layout.addRow("Subtitle Text:", self.text_edit)
+        layout.addRow(QLabel("Start Time:", font=fonts.font), self.start_time_edit)
+        layout.addRow(QLabel("End Time:", font=fonts.font), self.end_time_edit)
+        layout.addRow(QLabel("Subtitle Text:", font=fonts.font), self.text_edit)
         layout.addRow(self.auto_end_checkbox)
 
         ok_button = QPushButton("OK")
         cancel_button = QPushButton("Cancel")
         ok_button.clicked.connect(self.accept)
         cancel_button.clicked.connect(self.reject)
+        ok_button.setFont(fonts.font)
+        cancel_button.setFont(fonts.font)
 
         layout.addRow(ok_button, cancel_button)
         self.setLayout(layout)
+        self.text_edit.setFocus()
 
     def getValues(self):
         return {
@@ -54,9 +95,11 @@ class AddSubtitleDialog(QDialog):
             'auto_end': self.auto_end_checkbox.isChecked()
         }
 
-
 class EditSubtitleDialog(QDialog):
     def __init__(self, subtitle, parent=None):
+
+        fonts = ConfigureFonts()
+
         super().__init__(parent)
         self.setWindowTitle("Edit Subtitle")
         self.resize(400, 200)
@@ -64,26 +107,37 @@ class EditSubtitleDialog(QDialog):
         self.start_time_edit = QTimeEdit(QTime.fromString(subtitle['start'], 'hh:mm:ss.zzz'))
         self.end_time_edit = QTimeEdit(QTime.fromString(subtitle['end'], 'hh:mm:ss.zzz'))
         self.start_time_edit.setDisplayFormat("hh:mm:ss.zzz")
+        self.start_time_edit.setFont(fonts.font)
         self.end_time_edit.setDisplayFormat("hh:mm:ss.zzz")
+        self.end_time_edit.setFont(fonts.font)
 
         self.text_edit = QTextEdit(subtitle['text'])
         self.start_time_edit.setFixedWidth(150)
         self.end_time_edit.setFixedWidth(150)
+
         self.text_edit.setFixedWidth(400)
         self.text_edit.setFixedHeight(200)
 
+        new_font = QFont(fonts.font)  # Copy the current font
+        new_font.setPointSize(24)
+
+        self.text_edit.setFont(new_font)
+
         layout = QFormLayout()
-        layout.addRow("Start Time:", self.start_time_edit)
-        layout.addRow("End Time:", self.end_time_edit)
-        layout.addRow("Text:", self.text_edit)
+        layout.addRow(QLabel("Start Time:", font=fonts.font), self.start_time_edit)
+        layout.addRow(QLabel("End Time:", font=fonts.font), self.end_time_edit)
+        layout.addRow(QLabel("Text:", font=fonts.font), self.text_edit)
 
         ok_button = QPushButton("OK")
         cancel_button = QPushButton("Cancel")
         ok_button.clicked.connect(self.accept)
         cancel_button.clicked.connect(self.reject)
+        ok_button.setFont(fonts.font)
+        cancel_button.setFont(fonts.font)
 
         layout.addRow(ok_button, cancel_button)
         self.setLayout(layout)
+        self.text_edit.setFocus()
 
     def getValues(self):
         return {
@@ -99,21 +153,12 @@ class SubtitleWidget(QWidget):
         layout = QVBoxLayout()
         layout.setSpacing(5)
 
-        # Load and set the custom font
-        font_id = QFontDatabase.addApplicationFont(
-            os.path.join(runpath, "Louis George Cafe.ttf")
-        )
-        if font_id == -1:
-            print("Failed to load the custom font. Falling back to default.")
-            font_family = QApplication.font().family()
-        else:
-            font_family = QFontDatabase.applicationFontFamilies(font_id)[0]
-        self.font = QFont(font_family)
+        self.fonts = ConfigureFonts()
 
         self.start_label = QLabel(f'Start: {start}')
         self.end_label = QLabel(f'End: {end}')
         self.subtitle_label = QLabel(text)
-        self.subtitle_label.setFont(self.font)
+        self.subtitle_label.setFont(self.fonts.font)
 
         self.start_label.setStyleSheet("font-size: 12px; color: gray;")
         self.end_label.setStyleSheet("font-size: 12px; color: gray;")
@@ -130,20 +175,11 @@ class VideoPlayer(QWidget):
     def __init__(self):
         super().__init__()
 
-        # Load and set the custom font
-        font_id = QFontDatabase.addApplicationFont(
-            os.path.join(runpath, "Louis George Cafe.ttf")
-        )
-        if font_id == -1:
-            print("Failed to load the custom font. Falling back to default.")
-            font_family = QApplication.font().family()
-        else:
-            font_family = QFontDatabase.applicationFontFamilies(font_id)[0]
-        self.font = QFont(font_family)
+        self.fonts = ConfigureFonts()
 
         # Initialize video widget
         self.videoWidget = QVideoWidget()
-        self.videoWidget.setStyleSheet("background-color: black;")
+        self.videoWidget.setStyleSheet("background-color: dark grey;")
 
         # Media Player
         self.mediaPlayer = QMediaPlayer(self)
@@ -151,29 +187,34 @@ class VideoPlayer(QWidget):
         self.mediaPlayer.setAudioOutput(self.audioOutput)
 
         # Subtitle Display Box
-        self.subtitleBox = QLabel("Subtitles will be displayed here.")
-        self.subtitleBox.setStyleSheet("background-color: black; color: white; padding: 5px;")
-        self.subtitleBox.setFont(QFont("Courier New", 24))
+        self.subtitleBox = QLabel("")
+        self.subtitleBox.setStyleSheet("background-color: dark grey; color: white; padding: 5px;")
+        subtitle_font = self.fonts.font
+        subtitle_font.setPointSize(24)
+        self.subtitleBox.setFont(subtitle_font)
         self.subtitleBox.setAlignment(Qt.AlignmentFlag.AlignCenter)
         self.subtitleBox.setFixedHeight(50)
 
         # Additional selected subtitle display box
-        self.selectedSubtitleBox = QLabel("Selected subtitle will be displayed here.")
-        self.selectedSubtitleBox.setStyleSheet("background-color: black; color: white; padding: 5px;")
-        self.selectedSubtitleBox.setFont(QFont("Courier New", 16))
+        self.selectedSubtitleBox = QLabel("")
+        self.selectedSubtitleBox.setStyleSheet("background-color: dark grey; color: white; padding: 5px;")
+        self.selectedSubtitleBox.setFont(self.fonts.mono_font)
         self.selectedSubtitleBox.setAlignment(Qt.AlignmentFlag.AlignCenter)
         self.selectedSubtitleBox.setFixedHeight(50)
 
         # Open Button
-        openButton = QPushButton()
-        openButton.setIcon(self.style().standardIcon(QStyle.StandardPixmap.SP_DirOpenIcon))
+        openButton = QPushButton("Video")  # Set the text "Video" next to the icon
+        openButton.setIcon(self.style().standardIcon(QStyle.StandardPixmap.SP_DirOpenIcon))  # Set the open folder icon
+        openButton.setIconSize(QSize(16, 16))
         openButton.clicked.connect(self.openFile)
-        self.styleButton(openButton, double_width=False)
+        openButton.setFont(self.fonts.font)
+        self.styleButton(openButton, double_width=True)
 
-        # Load Subtitles Button
-        loadSubtitlesButton = QPushButton("Subs")
+        loadSubtitlesButton = QPushButton("Subtitles")
+        loadSubtitlesButton.setIcon(self.style().standardIcon(QStyle.StandardPixmap.SP_DirOpenIcon))  # Set the open folder icon
+        loadSubtitlesButton.setIconSize(QSize(16, 16))
         loadSubtitlesButton.clicked.connect(self.loadSubtitles)
-        loadSubtitlesButton.setFont(self.font)
+        loadSubtitlesButton.setFont(self.fonts.font)
         self.styleButton(loadSubtitlesButton, double_width=True)
 
         # Play Button
@@ -183,15 +224,15 @@ class VideoPlayer(QWidget):
         self.styleButton(self.playButton)
 
         # Frame-by-Frame Buttons
-        frameForwardButton = QPushButton("+ Frame")
+        frameForwardButton = QPushButton("+ 1")
         frameForwardButton.clicked.connect(self.stepFrameForward)
-        frameForwardButton.setFont(self.font)
-        self.styleButton(frameForwardButton, double_width=True)
+        frameForwardButton.setFont(self.fonts.font)
+        self.styleButton(frameForwardButton, double_width=False)
 
-        frameBackwardButton = QPushButton("- Frame")
+        frameBackwardButton = QPushButton("- 1")
         frameBackwardButton.clicked.connect(self.stepFrameBackward)
-        frameBackwardButton.setFont(self.font)
-        self.styleButton(frameBackwardButton, double_width=True)
+        frameBackwardButton.setFont(self.fonts.font)
+        self.styleButton(frameBackwardButton, double_width=False)
 
         # Fast Forward and Rewind Buttons
         forwardButton = QPushButton()
@@ -205,22 +246,24 @@ class VideoPlayer(QWidget):
         self.styleButton(backButton)
 
         # Set In and Set Out buttons (renamed to Sub IN and Sub OUT, and doubled in width)
-        subInButton = QPushButton("Set Subtitle IN")
+        subInButton = QPushButton("Subtitle IN")
         subInButton.clicked.connect(self.setInPoint)
-        subInButton.setFont(self.font)
+        subInButton.setFont(self.fonts.font)
         self.styleButton(subInButton, double_width=True)
 
-        subOutButton = QPushButton("Sub Subtitle OUT")
+        subOutButton = QPushButton("Subtitle OUT")
         subOutButton.clicked.connect(self.setOutPoint)
-        subOutButton.setFont(self.font)
+        subOutButton.setFont(self.fonts.font)
         self.styleButton(subOutButton, double_width=True)
 
         # Timecode Label
-        self.timecodeLabel = QLabel("00:00:00:000")
-        self.timecodeLabel.setStyleSheet("background-color: black; color: white; padding: 0 10px;")
-        self.timecodeLabel.setFont(QFont("Courier New", 16))
+        self.timecodeLabel = QLabel("00:00:00,000")
+        self.timecodeLabel.setStyleSheet("background-color: dark grey; color: white; padding: 0 10px;")
+        timecode_font = QFont(self.fonts.mono_font)
+        timecode_font.setPointSize(24)
+        self.timecodeLabel.setFont(timecode_font)
         self.timecodeLabel.setFixedHeight(50)
-        self.timecodeLabel.setAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
+        self.timecodeLabel.setAlignment(Qt.AlignmentFlag.AlignCenter | Qt.AlignmentFlag.AlignVCenter)
 
         # Slider
         self.slider = QSlider(Qt.Orientation.Horizontal)
@@ -253,13 +296,13 @@ class VideoPlayer(QWidget):
         # Add and Delete buttons for subtitles (reduced size)
         addSubtitleButton = QPushButton("Add Subtitle")
         addSubtitleButton.clicked.connect(self.addSubtitle)  # Correctly defined now
-        addSubtitleButton.setFont(self.font)
+        addSubtitleButton.setFont(self.fonts.font)
         self.styleButton(addSubtitleButton, double_width=True)
         addSubtitleButton.setFixedWidth(200)
 
         deleteSubtitleButton = QPushButton("Remove Subtitle")
         deleteSubtitleButton.clicked.connect(self.deleteSubtitle)
-        deleteSubtitleButton.setFont(self.font)
+        deleteSubtitleButton.setFont(self.fonts.font)
         self.styleButton(deleteSubtitleButton, double_width=True)
         deleteSubtitleButton.setFixedWidth(200)
 
@@ -278,19 +321,24 @@ class VideoPlayer(QWidget):
         splitter.addWidget(subtitleWidget)
         splitter.setSizes([800, 300])
 
-        # Main layout
+        # Main layout (add waveform under the slider)
         layout = QVBoxLayout()
         layout.addWidget(splitter)
         layout.addWidget(self.subtitleBox)
         layout.addWidget(self.selectedSubtitleBox)
         layout.addWidget(self.slider)
+        # layout.addWidget(self.waveformLabel)  # Add waveform display
         layout.addLayout(bottomLayout)
         layout.setSpacing(10)
         layout.setContentsMargins(10, 10, 10, 10)
 
+        # Store the current file path and duration
+        self.currentFilePath = None
+        self.duration = 0
+
         self.setLayout(layout)
 
-        self.setWindowTitle("Video Player with Subtitles")
+        self.setWindowTitle("Smart Subs")
         self.setGeometry(100, 100, 1000, 600)
 
         # Media Player Settings
@@ -311,8 +359,13 @@ class VideoPlayer(QWidget):
         self.selectedSubtitle = None
         self.allow_snapping = True
 
+        # Inside the VideoPlayer constructor
+        self.mediaPlayer.playbackStateChanged.connect(self.updateButtons)
+
+
     def styleButton(self, button, double_width=False):
-        width = 150 if double_width else 40  # Doubled the width for Sub IN/OUT buttons
+        width = 100 if double_width else 50  # Doubled the width for Sub IN/OUT buttons
+        height = 40
         button.setStyleSheet("""
             QPushButton {
                 background-color: #888;
@@ -328,7 +381,7 @@ class VideoPlayer(QWidget):
                 border-style: inset;
             }
         """)
-        button.setFixedSize(width, 30)
+        button.setFixedSize(width, height)
 
     def addSubtitle(self):
         current_timecode = self.mediaPlayer.position()
@@ -362,7 +415,8 @@ class VideoPlayer(QWidget):
 
     def openFile(self):
         fileName, _ = QFileDialog.getOpenFileName(self, "Open Media File", "", "Video Files (*.mp4 *.avi *.mkv *.mov)")
-        if fileName != '':
+        if fileName:
+            self.currentFilePath = fileName  # Store the current file path for later use
             self.mediaPlayer.setSource(QUrl.fromLocalFile(fileName))
             self.playButton.setEnabled(True)
 
@@ -400,7 +454,14 @@ class VideoPlayer(QWidget):
         self.selectedSubtitle = subtitle
         self.allow_snapping = False
 
-        self.selectedSubtitleBox.setText(f"{subtitle['start']} --> {subtitle['end']}: {subtitle['text']}")
+        select_subtitle_font = QFont(self.fonts.mono_font)
+        select_subtitle_font.setPointSize(16)
+
+        self.selectedSubtitleBox.setFont(select_subtitle_font)
+
+        self.selectedSubtitleBox.setText(
+            f"Selected: {subtitle['start']} --> {subtitle['end']}: {subtitle['text']}"
+        )
 
     def editSubtitle(self, item):
         row = self.subtitleList.row(item)
@@ -430,13 +491,23 @@ class VideoPlayer(QWidget):
             self.populateSubtitleList()
             self.selectedSubtitleBox.setText(f"{self.selectedSubtitle['start']} --> {self.selectedSubtitle['end']}: {self.selectedSubtitle['text']}")
 
+    # def playPause(self):
+    #     if self.mediaPlayer.playbackState() == QMediaPlayer.PlaybackState.PlayingState:
+    #         self.mediaPlayer.pause()
+    #     else:
+    #         self.mediaPlayer.play()
+    #         self.playButton.setIcon(self.style().standardIcon(QStyle.StandardPixmap.SP_MediaPause))
+    #         self.allow_snapping = True
+
     def playPause(self):
+        """
+        Toggles between play and pause.
+        """
         if self.mediaPlayer.playbackState() == QMediaPlayer.PlaybackState.PlayingState:
             self.mediaPlayer.pause()
         else:
             self.mediaPlayer.play()
-            self.playButton.setIcon(self.style().standardIcon(QStyle.StandardPixmap.SP_MediaPause))
-            self.allow_snapping = True
+
 
     def forward(self):
         self.mediaPlayer.setPosition(self.mediaPlayer.position() + 5000)
@@ -460,14 +531,47 @@ class VideoPlayer(QWidget):
         if self.mediaPlayer.playbackState() == QMediaPlayer.PlaybackState.PlayingState:
             self.mediaPlayer.pause()
 
-    def setPositionAndPause(self):
-        self.mediaPlayer.setPosition(self.slider.value())
-        self.pauseVideo()
-        self.allow_snapping = True
-
     def updatePositionWhileSliding(self, position):
+        """Called while the slider is being moved."""
         self.slider.setValue(position)
         self.updateTimecode(position)
+        self.scrubAudio(position, scrubbing=True)  # Short scrubbing while sliding
+
+    def setPositionAndPause(self):
+        """Called when the slider is released, and video pauses."""
+        self.mediaPlayer.setPosition(self.slider.value())
+        self.pauseVideo()
+        self.scrubAudio(self.slider.value(), scrubbing=False)  # Longer scrubbing on slider release
+
+    def scrubAudio(self, position, scrubbing=True):
+        """
+        Plays a short or longer snippet of audio depending on whether the user is scrubbing or has released the slider,
+        and returns the playhead back to the original position after playing the audio.
+        """
+        # Store the current playhead position
+        self.original_position = self.mediaPlayer.position()
+
+        # Set the media player to the current position for scrubbing
+        self.mediaPlayer.setPosition(position)
+        self.audioOutput.setVolume(0.7)  # Set the volume for scrubbing
+
+        # Play audio snippet
+        self.mediaPlayer.play()
+
+        # After playing the audio snippet, return the playhead to the original position
+        snippet_duration = 300 if scrubbing else 300  # Shorter when scrubbing, longer on release
+        QTimer.singleShot(snippet_duration, self.returnPlayheadToOriginal)
+
+    def returnPlayheadToOriginal(self):
+        """
+        Pauses the media player and returns the playhead to the original position.
+        """
+        # Pause the media player to stop both audio and video
+        self.mediaPlayer.pause()
+
+        # Return the playhead back to the original position
+        self.mediaPlayer.setPosition(self.original_position)
+
 
     def updatePosition(self, position):
         self.slider.setValue(position)
@@ -481,7 +585,7 @@ class VideoPlayer(QWidget):
             position = self.mediaPlayer.position()
 
         time = QTime(0, 0, 0).addMSecs(position)
-        timecode = f'{time.hour():02}:{time.minute():02}:{time.second():02}:{time.msec():03}'
+        timecode = f'{time.hour():02}:{time.minute():02}:{time.second():02},{time.msec():03}'
         self.timecodeLabel.setText(timecode)
 
         if self.allow_snapping:
@@ -508,12 +612,14 @@ class VideoPlayer(QWidget):
                 return subtitle['text']
         return ""
 
-    def updateButtons(self, status):
+    def updateButtons(self, status=None):
+        """
+        Updates the play/pause button icon based on the current playback state.
+        """
         if self.mediaPlayer.playbackState() == QMediaPlayer.PlaybackState.PlayingState:
             self.playButton.setIcon(self.style().standardIcon(QStyle.StandardPixmap.SP_MediaPause))
         else:
             self.playButton.setIcon(self.style().standardIcon(QStyle.StandardPixmap.SP_MediaPlay))
-
 
 if __name__ == '__main__':
     app = QApplication(sys.argv)
