@@ -99,13 +99,25 @@ class SubtitleWidget(QWidget):
         layout = QVBoxLayout()
         layout.setSpacing(5)
 
+        # Load and set the custom font
+        font_id = QFontDatabase.addApplicationFont(
+            os.path.join(runpath, "Louis George Cafe.ttf")
+        )
+        if font_id == -1:
+            print("Failed to load the custom font. Falling back to default.")
+            font_family = QApplication.font().family()
+        else:
+            font_family = QFontDatabase.applicationFontFamilies(font_id)[0]
+        self.font = QFont(font_family)
+
         self.start_label = QLabel(f'Start: {start}')
         self.end_label = QLabel(f'End: {end}')
         self.subtitle_label = QLabel(text)
+        self.subtitle_label.setFont(self.font)
 
         self.start_label.setStyleSheet("font-size: 12px; color: gray;")
         self.end_label.setStyleSheet("font-size: 12px; color: gray;")
-        self.subtitle_label.setStyleSheet("font-size: 18px; font-weight: bold; color: black;")
+        self.subtitle_label.setStyleSheet("font-size: 18px; font-weight: bold; color: white;")
 
         layout.addWidget(self.start_label)
         layout.addWidget(self.end_label)
@@ -193,12 +205,12 @@ class VideoPlayer(QWidget):
         self.styleButton(backButton)
 
         # Set In and Set Out buttons (renamed to Sub IN and Sub OUT, and doubled in width)
-        subInButton = QPushButton("Sub IN")
+        subInButton = QPushButton("Set Subtitle IN")
         subInButton.clicked.connect(self.setInPoint)
         subInButton.setFont(self.font)
         self.styleButton(subInButton, double_width=True)
 
-        subOutButton = QPushButton("Sub OUT")
+        subOutButton = QPushButton("Sub Subtitle OUT")
         subOutButton.clicked.connect(self.setOutPoint)
         subOutButton.setFont(self.font)
         self.styleButton(subOutButton, double_width=True)
