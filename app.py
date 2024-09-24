@@ -213,7 +213,7 @@ class VideoPlayer(QWidget):
         loadSubtitlesButton = QPushButton("Subtitles")
         loadSubtitlesButton.setIcon(self.style().standardIcon(QStyle.StandardPixmap.SP_DirOpenIcon))  # Set the open folder icon
         loadSubtitlesButton.setIconSize(QSize(16, 16))
-        loadSubtitlesButton.clicked.connect(self.loadSubtitles)
+        loadSubtitlesButton.clicked.connect(self.loadSubtitlesManually)
         loadSubtitlesButton.setFont(self.fonts.font)
         self.styleButton(loadSubtitlesButton, double_width=True)
 
@@ -334,6 +334,7 @@ class VideoPlayer(QWidget):
 
         # Store the current file path and duration
         self.currentFilePath = None
+        self.subtitleFilePath = None
         self.duration = 0
 
         self.setLayout(layout)
@@ -349,9 +350,10 @@ class VideoPlayer(QWidget):
 
         # Timer to update timecode and subtitles
         self.timer = QTimer(self)
-        self.timer.setInterval(100)
+        self.timer.setInterval(100)  # Adjust this interval as needed
         self.timer.timeout.connect(self.updateTimecode)
         self.timer.start()
+
 
         self.frame_rate = 25  # Default frame rate
         self.subtitles = []  # Store subtitles from JSON
@@ -384,6 +386,9 @@ class VideoPlayer(QWidget):
         button.setFixedSize(width, height)
 
     def addSubtitle(self):
+        """
+        Add a new subtitle, then save the subtitles to the JSON file.
+        """
         current_timecode = self.mediaPlayer.position()
         start_time = QTime(0, 0, 0).addMSecs(current_timecode).toString('hh:mm:ss.zzz')
         default_end_time = QTime(0, 0, 0).addMSecs(current_timecode + 2000).toString('hh:mm:ss.zzz')
@@ -406,14 +411,47 @@ class VideoPlayer(QWidget):
             new_subtitle = {"start": start_time, "end": end_time, "text": text}
             self.subtitles.append(new_subtitle)
             self.populateSubtitleList()
+            self.saveSubtitles()  # Save the updated subtitles
+
+    # def addSubtitle(self):
+    #     current_timecode = self.mediaPlayer.position()
+    #     start_time = QTime(0, 0, 0).addMSecs(current_timecode).toString('hh:mm:ss.zzz')
+    #     default_end_time = QTime(0, 0, 0).addMSecs(current_timecode + 2000).toString('hh:mm:ss.zzz')
+    #
+    #     add_subtitle_dialog = AddSubtitleDialog(start_time, default_end_time, self)
+    #     result = add_subtitle_dialog.exec()
+    #
+    #     if result == QDialog.DialogCode.Accepted:
+    #         values = add_subtitle_dialog.getValues()
+    #         text = values['text']
+    #         start_time = values['start']
+    #
+    #         if values['auto_end']:
+    #             num_words = len(text.split())
+    #             end_time_ms = current_timecode + num_words * 1000
+    #             end_time = QTime(0, 0, 0).addMSecs(end_time_ms).toString('hh:mm:ss.zzz')
+    #         else:
+    #             end_time = values['end']
+    #
+    #         new_subtitle = {"start": start_time, "end": end_time, "text": text}
+    #         self.subtitles.append(new_subtitle)
+    #         self.populateSubtitleList()
 
     def deleteSubtitle(self):
+        """
+        Delete a subtitle, then save the subtitles to the JSON file.
+        """
         selected_row = self.subtitleList.currentRow()
         if selected_row >= 0:
             del self.subtitles[selected_row]
             self.populateSubtitleList()
+            self.saveSubtitles()  # Save the updated subtitles
 
     def openFile(self):
+        """
+        Open a video file and load the corresponding subtitle file if it exists,
+        or create an empty subtitle file if it doesn't.
+        """
         fileName, _ = QFileDialog.getOpenFileName(self, "Open Media File", "", "Video Files (*.mp4 *.avi *.mkv *.mov)")
         if fileName:
             self.currentFilePath = fileName  # Store the current file path for later use
@@ -424,15 +462,59 @@ class VideoPlayer(QWidget):
             self.frame_rate = video.get(cv2.CAP_PROP_FPS)
             video.release()
 
+            # Generate the subtitle file path with the same name as the video but with a .json extension
+            self.subtitleFilePath = os.path.splitext(fileName)[0] + ".json"
+
+            # Clear the subtitle playlist when loading a new video
+            self.subtitles = []
+            self.populateSubtitleList()  # Clear the UI list
+
+            # Check if the subtitle file exists, and load it if it does
+            if os.path.exists(self.subtitleFilePath):
+                self.loadSubtitles()  # Automatically load subtitles if the file exists
+            else:
+                # If it doesn't exist, create an empty subtitle file
+                self.saveSubtitles()  # Save the empty subtitles list to a new JSON file
+
     def loadSubtitles(self):
+        """
+        Load subtitles from the JSON file.
+        """
+        if self.subtitleFilePath:
+            try:
+                with open(self.subtitleFilePath, 'r') as file:
+                    self.subtitles = json.load(file)
+                    self.populateSubtitleList()
+            except Exception as e:
+                print(f"Error loading subtitles: {e}")
+
+    def loadSubtitlesManually(self):
+        """
+        Manually load subtitles via the button.
+        """
         fileName, _ = QFileDialog.getOpenFileName(self, "Open Subtitles File", "", "Subtitle Files (*.json)")
         if fileName:
-            with open(fileName, 'r') as file:
-                self.subtitles = json.load(file)
-                self.populateSubtitleList()
+            self.subtitleFilePath = fileName  # Set the subtitle file path to the manually loaded file
+            self.loadSubtitles()  # Load the selected subtitle file
+
+    def saveSubtitles(self):
+        """
+        Save subtitles to the JSON file.
+        """
+        if self.subtitleFilePath:
+            try:
+                with open(self.subtitleFilePath, 'w') as file:
+                    json.dump(self.subtitles, file, indent=4)
+                print(f"Subtitles saved to {self.subtitleFilePath}")
+            except Exception as e:
+                print(f"Error saving subtitles: {e}")
 
     def populateSubtitleList(self):
-        self.subtitleList.clear()
+        """
+        Populate the subtitle list widget from the subtitles.
+        Clears the list if no subtitles are available.
+        """
+        self.subtitleList.clear()  # Clear the list first
         for index, subtitle in enumerate(self.subtitles):
             widget = SubtitleWidget(subtitle["start"], subtitle["end"], subtitle["text"])
             item = QListWidgetItem(self.subtitleList)
@@ -464,6 +546,9 @@ class VideoPlayer(QWidget):
         )
 
     def editSubtitle(self, item):
+        """
+        Edit a subtitle, then save the subtitles to the JSON file.
+        """
         row = self.subtitleList.row(item)
         subtitle = self.subtitles[row]
 
@@ -474,6 +559,19 @@ class VideoPlayer(QWidget):
             updated_values = edit_dialog.getValues()
             self.subtitles[row] = updated_values
             self.populateSubtitleList()
+            self.saveSubtitles()  # Save the updated subtitles
+
+    # def editSubtitle(self, item):
+    #     row = self.subtitleList.row(item)
+    #     subtitle = self.subtitles[row]
+    #
+    #     edit_dialog = EditSubtitleDialog(subtitle, self)
+    #     result = edit_dialog.exec()
+    #
+    #     if result == QDialog.DialogCode.Accepted:
+    #         updated_values = edit_dialog.getValues()
+    #         self.subtitles[row] = updated_values
+    #         self.populateSubtitleList()
 
     def setInPoint(self):
         if self.selectedSubtitle:
@@ -490,14 +588,6 @@ class VideoPlayer(QWidget):
             self.selectedSubtitle['end'] = new_end_time
             self.populateSubtitleList()
             self.selectedSubtitleBox.setText(f"{self.selectedSubtitle['start']} --> {self.selectedSubtitle['end']}: {self.selectedSubtitle['text']}")
-
-    # def playPause(self):
-    #     if self.mediaPlayer.playbackState() == QMediaPlayer.PlaybackState.PlayingState:
-    #         self.mediaPlayer.pause()
-    #     else:
-    #         self.mediaPlayer.play()
-    #         self.playButton.setIcon(self.style().standardIcon(QStyle.StandardPixmap.SP_MediaPause))
-    #         self.allow_snapping = True
 
     def playPause(self):
         """
@@ -581,6 +671,9 @@ class VideoPlayer(QWidget):
         self.slider.setRange(0, duration)
 
     def updateTimecode(self, position=None):
+        """
+        Update the timecode and highlight the currently playing subtitle.
+        """
         if position is None:
             position = self.mediaPlayer.position()
 
@@ -595,6 +688,9 @@ class VideoPlayer(QWidget):
         self.subtitleBox.setText(self.currentSubtitle)
 
     def highlightCurrentSubtitle(self, position):
+        """
+        Highlight the current subtitle in the subtitle list based on the playhead position.
+        """
         current_time = QTime(0, 0, 0).addMSecs(position)
         for index, subtitle in enumerate(self.subtitles):
             start_time = QTime.fromString(subtitle['start'], 'hh:mm:ss.zzz')
@@ -604,6 +700,9 @@ class VideoPlayer(QWidget):
                 break
 
     def getSubtitleForTime(self, position):
+        """
+        Retrieve the subtitle text for the given playhead position.
+        """
         current_time = QTime(0, 0, 0).addMSecs(position)
         for subtitle in self.subtitles:
             start_time = QTime.fromString(subtitle['start'], 'hh:mm:ss.zzz')
