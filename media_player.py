@@ -1,3 +1,4 @@
+import os
 import sys
 import json
 import cv2  # For reading frame rate
@@ -7,6 +8,10 @@ from PyQt6.QtMultimediaWidgets import QVideoWidget
 from PyQt6.QtCore import QUrl, Qt, QTimer, QTime
 from PyQt6.QtGui import *
 
+if getattr(sys, 'frozen', False):
+    runpath = os.path.dirname(sys.executable)
+else:
+    runpath = os.path.abspath(os.path.dirname(__file__))
 
 class AddSubtitleDialog(QDialog):
     def __init__(self, start_time, default_end_time, parent=None):
@@ -113,6 +118,17 @@ class VideoPlayer(QWidget):
     def __init__(self):
         super().__init__()
 
+        # Load and set the custom font
+        font_id = QFontDatabase.addApplicationFont(
+            os.path.join(runpath, "Louis George Cafe.ttf")
+        )
+        if font_id == -1:
+            print("Failed to load the custom font. Falling back to default.")
+            font_family = QApplication.font().family()
+        else:
+            font_family = QFontDatabase.applicationFontFamilies(font_id)[0]
+        self.font = QFont(font_family)
+
         # Initialize video widget
         self.videoWidget = QVideoWidget()
         self.videoWidget.setStyleSheet("background-color: black;")
@@ -145,6 +161,7 @@ class VideoPlayer(QWidget):
         # Load Subtitles Button
         loadSubtitlesButton = QPushButton("Subs")
         loadSubtitlesButton.clicked.connect(self.loadSubtitles)
+        loadSubtitlesButton.setFont(self.font)
         self.styleButton(loadSubtitlesButton, double_width=True)
 
         # Play Button
@@ -156,10 +173,12 @@ class VideoPlayer(QWidget):
         # Frame-by-Frame Buttons
         frameForwardButton = QPushButton("+ Frame")
         frameForwardButton.clicked.connect(self.stepFrameForward)
+        frameForwardButton.setFont(self.font)
         self.styleButton(frameForwardButton, double_width=True)
 
         frameBackwardButton = QPushButton("- Frame")
         frameBackwardButton.clicked.connect(self.stepFrameBackward)
+        frameBackwardButton.setFont(self.font)
         self.styleButton(frameBackwardButton, double_width=True)
 
         # Fast Forward and Rewind Buttons
@@ -176,10 +195,12 @@ class VideoPlayer(QWidget):
         # Set In and Set Out buttons (renamed to Sub IN and Sub OUT, and doubled in width)
         subInButton = QPushButton("Sub IN")
         subInButton.clicked.connect(self.setInPoint)
+        subInButton.setFont(self.font)
         self.styleButton(subInButton, double_width=True)
 
         subOutButton = QPushButton("Sub OUT")
         subOutButton.clicked.connect(self.setOutPoint)
+        subOutButton.setFont(self.font)
         self.styleButton(subOutButton, double_width=True)
 
         # Timecode Label
@@ -218,13 +239,15 @@ class VideoPlayer(QWidget):
         self.subtitleList = QListWidget()
 
         # Add and Delete buttons for subtitles (reduced size)
-        addSubtitleButton = QPushButton("Add")
+        addSubtitleButton = QPushButton("Add Subtitle")
         addSubtitleButton.clicked.connect(self.addSubtitle)  # Correctly defined now
+        addSubtitleButton.setFont(self.font)
         self.styleButton(addSubtitleButton, double_width=True)
         addSubtitleButton.setFixedWidth(200)
 
-        deleteSubtitleButton = QPushButton("Remove")
+        deleteSubtitleButton = QPushButton("Remove Subtitle")
         deleteSubtitleButton.clicked.connect(self.deleteSubtitle)
+        deleteSubtitleButton.setFont(self.font)
         self.styleButton(deleteSubtitleButton, double_width=True)
         deleteSubtitleButton.setFixedWidth(200)
 
