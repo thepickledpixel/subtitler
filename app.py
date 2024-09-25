@@ -438,7 +438,7 @@ class VideoPlayer(QWidget):
 
         # Timer to update timecode and subtitles
         self.timer = QTimer(self)
-        self.timer.setInterval(100)
+        self.timer.setInterval(2000)
         self.timer.timeout.connect(self.updateTimecode)
         self.timer.start()
 
@@ -446,7 +446,7 @@ class VideoPlayer(QWidget):
         self.subtitles = []  # Store subtitles from JSON
         self.currentSubtitle = ""
         self.selectedSubtitle = None
-        self.allow_snapping = False
+        # self.allow_snapping = False
 
         self.mediaPlayer.playbackStateChanged.connect(self.updateButtons)
 
@@ -648,7 +648,7 @@ class VideoPlayer(QWidget):
         row = self.subtitleList.row(item)
         subtitle = self.subtitles[row]
         self.selectedSubtitle = subtitle
-        self.allow_snapping = False
+        # self.allow_snapping = False
 
         # Display the selected subtitle in the additional subtitle box
         select_subtitle_font = QFont(self.fonts.mono_font)
@@ -695,9 +695,12 @@ class VideoPlayer(QWidget):
         """
         if self.mediaPlayer.playbackState() == QMediaPlayer.PlaybackState.PlayingState:
             self.mediaPlayer.pause()
+            current_position = self.mediaPlayer.position()
+            self.highlightCurrentSubtitle(current_position)
         else:
             self.mediaPlayer.play()
-            self.allow_snapping = True  # Re-enable snapping when the video plays
+            # if not self.allow_snapping:
+                # self.allow_snapping = True  # Re-enable snapping when the video plays
 
 
     def forward(self):
@@ -726,12 +729,16 @@ class VideoPlayer(QWidget):
         """Called while the slider is being moved."""
         self.slider.setValue(position)
         self.updateTimecode(position)
+        current_position = self.mediaPlayer.position()
+        self.highlightCurrentSubtitle(current_position)
         self.scrubAudio(position, scrubbing=True)  # Short scrubbing while sliding
 
     def setPositionAndPause(self):
         """Called when the slider is released, and video pauses."""
         self.mediaPlayer.setPosition(self.slider.value())
         self.pauseVideo()
+        current_position = self.mediaPlayer.position()
+        self.highlightCurrentSubtitle(current_position)
         self.scrubAudio(self.slider.value(), scrubbing=False)  # Longer scrubbing on slider release
         # self.allow_snapping = True  # Re-enable snapping after slider release
 
@@ -783,8 +790,8 @@ class VideoPlayer(QWidget):
         timecode = f'{time.hour():02}:{time.minute():02}:{time.second():02},{time.msec():03}'
         self.timecodeLabel.setText(timecode)
 
-        if self.allow_snapping:
-            self.highlightCurrentSubtitle(position)
+        # if self.allow_snapping:
+        #     self.highlightCurrentSubtitle(position)
 
         self.currentSubtitle = self.getSubtitleForTime(position)
         self.subtitleBox.setText(self.currentSubtitle)
