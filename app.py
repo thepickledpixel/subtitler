@@ -23,7 +23,7 @@ class ConfigureFonts():
     def __init__(self):
         # Load and set the custom font
         font_id = QFontDatabase.addApplicationFont(
-            os.path.join(runpath, "Louis George Cafe.ttf")
+            os.path.join(runpath, "fonts", "Louis George Cafe.ttf")
         )
         if font_id == -1:
             print("Failed to load the custom font. Falling back to default.")
@@ -34,7 +34,7 @@ class ConfigureFonts():
 
         # Load and set the custom font
         mono_font_id = QFontDatabase.addApplicationFont(
-            os.path.join(runpath, "ConsolaMono-Book.ttf")
+            os.path.join(runpath, "fonts", "ConsolaMono-Book.ttf")
         )
         if mono_font_id == -1:
             print("Failed to load the custom font. Falling back to default.")
@@ -566,14 +566,6 @@ class VideoPlayer(QWidget):
         select_subtitle_font.setPointSize(16)
         self.selectedSubtitleBox.setFont(select_subtitle_font)
         self.selectedSubtitleBox.setText(f"Selected: {subtitle['start']} --> {subtitle['end']}: {subtitle['text']}")
-
-    #     # Re-enable snapping after 2 seconds (or a custom delay)
-    #     QTimer.singleShot(5000, lambda: self.setSnapping(True))
-    #
-    # def setSnapping(self, enable):
-    #     """Utility function to toggle snapping."""
-    #     self.allow_snapping = enable
-
 
     def editSubtitle(self, item):
         """
