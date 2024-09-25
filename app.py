@@ -8,6 +8,8 @@ from PyQt6.QtMultimediaWidgets import QVideoWidget
 from PyQt6.QtCore import QUrl, Qt, QTimer, QTime, QByteArray, QSize, QThread, pyqtSignal
 from PyQt6.QtGui import *
 
+from multiprocessing import Process
+
 import numpy as np
 import matplotlib.pyplot as plt
 from pydub import AudioSegment
@@ -23,29 +25,60 @@ else:
 class SpinnerDialog(QDialog):
     def __init__(self, parent=None):
         super().__init__(parent)
+
+        self.fonts = ConfigureFonts()
+
         self.setWindowTitle("Generating Subtitles")
         self.setModal(True)
         self.setWindowFlags(self.windowFlags() | Qt.WindowType.WindowStaysOnTopHint)
-        self.setFixedSize(300, 150)  # Set fixed width and height
+        self.setFixedSize(400, 250)  # Set fixed width and height
 
+        # Create a vertical layout
         layout = QVBoxLayout()
+        layout.setAlignment(Qt.AlignmentFlag.AlignCenter)  # Center the contents vertically
 
         # Create and set up the animated spinner
         self.spinnerLabel = QLabel("Generating Subtitles...")
-        layout.addWidget(self.spinnerLabel)
+        spinner_font = QFont(self.fonts.font)
+        spinner_font.setPointSize(24)
+        self.spinnerLabel.setFont(spinner_font)
+        layout.addWidget(self.spinnerLabel, alignment=Qt.AlignmentFlag.AlignCenter)
 
         self.movieLabel = QLabel()
-        self.movie = QMovie(os.path.join(runpath, "static", "spinner.gif"))  # Replace with the path to your animated GIF
+        self.movie = QMovie(os.path.join(runpath, "static", "spinner.gif"))  # Path to your animated GIF
         self.movieLabel.setMovie(self.movie)
+        self.movieLabel.setFixedSize(130, 130)  # Set size for the spinner
+        self.movieLabel.setScaledContents(True)
         self.movie.start()
-        layout.addWidget(self.movieLabel)
+        layout.addWidget(self.movieLabel, alignment=Qt.AlignmentFlag.AlignCenter)
 
         # Add the cancel button
         self.cancelButton = QPushButton("Cancel")
+        self.styleButton(self.cancelButton)
         self.cancelButton.clicked.connect(self.cancel)
-        layout.addWidget(self.cancelButton)
+        layout.addWidget(self.cancelButton, alignment=Qt.AlignmentFlag.AlignCenter)
 
         self.setLayout(layout)
+
+    def styleButton(self, button):
+        width = 100 # Doubled the width for Sub IN/OUT buttons
+        height = 40
+        button.setStyleSheet("""
+            QPushButton {
+                background-color: #888;
+                color: white;
+                border: 1px solid #444;
+                border-radius: 8px;
+                padding: 6px;
+                font-size: 14px;
+                font-weight: bold;
+            }
+            QPushButton:pressed {
+                background-color: #666;
+                border-style: inset;
+            }
+        """)
+        button.setFixedSize(width, height)
 
     def cancel(self):
         self.reject()  # Close the dialog when canceled
@@ -54,21 +87,20 @@ class SpinnerDialog(QDialog):
         # Prevent closing the dialog
         event.ignore()
 
-class SubtitleWorker(QThread):
-    finished = pyqtSignal()
-
+class SubtitleWorker:
     def __init__(self, file_path):
-        super().__init__()
         self.file_path = file_path
-        self._is_running = True
+        self.process = None
 
-    def run(self):
-        make_subtitles(self.file_path)  # Your function to generate subtitles
-        if self._is_running:
-            self.finished.emit()
+    def start(self):
+        self.process = Process(target=make_subtitles, args=(self.file_path,))
+        self.process.start()
 
     def stop(self):
-        self._is_running = False
+        if self.process:
+            self.process.terminate()  # Terminate the process
+            self.process.join()  # Ensure the process is fully terminated
+            print("Process terminated.")
 
 class ConfigureFonts():
     def __init__(self):
@@ -308,7 +340,7 @@ class VideoPlayer(QWidget):
         subOutButton.setFont(self.fonts.font)
         self.styleButton(subOutButton, double_width=True)
 
-        genSubsButton = QPushButton("Generate Subtitles")
+        genSubsButton = QPushButton("AI Subtitles")
         genSubsButton.clicked.connect(self.generateSubtitles)
         genSubsButton.setFont(self.fonts.font)
         self.styleButton(genSubsButton, double_width=True)
@@ -791,30 +823,40 @@ class VideoPlayer(QWidget):
             self.playButton.setIcon(self.style().standardIcon(QStyle.StandardPixmap.SP_MediaPlay))
 
     def generateSubtitles(self):
-        self.spinner = SpinnerDialog(self)  # Create the spinner dialog
-        self.spinner.show()  # Show the dialog
+        if not self.currentFilePath:
+            print("No video loaded")
+            return
 
-        # Create and start the worker thread
-        self.worker = SubtitleWorker(self.currentFilePath)
-        self.worker.finished.connect(self.onSubtitlesGenerated)  # Connect signal here
-        self.worker.start()
+        try:
+            self.spinner = SpinnerDialog(self)  # Create the spinner dialog
+            self.spinner.show()  # Show the dialog
 
-        # Connect the cancel button to stop the worker
-        self.spinner.cancelButton.clicked.connect(self.worker.stop)
+            # Create and start the worker thread
+            self.worker = SubtitleWorker(self.currentFilePath)
+            # self.worker.finished.connect(self.onSubtitlesGenerated)  # Connect signal
+            self.worker.start()
+
+            # Connect the cancel button to stop the worker
+            self.spinner.cancelButton.clicked.connect(self.worker.stop)
+        except Exception as e:
+            print(e)
+            return
 
     def onSubtitlesGenerated(self):
-        self.spinner.accept()  # Use accept to close the dialog correctly
+        try:
+            self.spinner.accept()  # Use accept to close the dialog correctly
 
-        self.subtitleFilePath = os.path.splitext(self.currentFilePath)[0] + ".json"
+            self.subtitleFilePath = os.path.splitext(self.currentFilePath)[0] + ".json"
 
-        # Clear the subtitle playlist when loading a new video
-        self.subtitles = []  # Clear the subtitle data
-        self.populateSubtitleList()  # Clear the UI list
+            # Clear the subtitle playlist when loading a new video
+            self.subtitles = []  # Clear the subtitle data
+            self.populateSubtitleList()  # Clear the UI list
 
-        if os.path.exists(self.subtitleFilePath):
-            self.loadSubtitles()
-
-
+            if os.path.exists(self.subtitleFilePath):
+                self.loadSubtitles()
+        except Exception as e:
+            print(e)
+            return
 
 if __name__ == '__main__':
     app = QApplication(sys.argv)
