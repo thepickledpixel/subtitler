@@ -496,6 +496,14 @@ class VideoPlayer(QWidget):
 
         self.mediaPlayer.playbackStateChanged.connect(self.updateButtons)
 
+    def keyPressEvent(self, event):
+        if event.key() == Qt.Key.Key_Space:
+            self.playPause()  # Space bar to toggle play/pause
+        elif event.key() == Qt.Key.Key_Left:
+            self.backward()  # Left arrow to rewind
+        elif event.key() == Qt.Key.Key_Right:
+            self.forward()  # Right arrow to fast forward
+
     def question_box(self, title, question):
         reply = QMessageBox.question(
             self, title, question,
