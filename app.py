@@ -3,10 +3,12 @@ import sys
 import json
 import cv2  # For reading frame rate
 from PyQt6.QtWidgets import *
+from PyQt6.QtCore import *
+from PyQt6.QtGui import *
+
 from PyQt6.QtMultimedia import QMediaPlayer, QAudioOutput, QMediaDevices, QAudioSink
 from PyQt6.QtMultimediaWidgets import QVideoWidget
-from PyQt6.QtCore import QUrl, Qt, QTimer, QTime, QByteArray, QSize, QThread, pyqtSignal
-from PyQt6.QtGui import *
+
 
 from multiprocessing import Process
 
@@ -21,6 +23,14 @@ if getattr(sys, 'frozen', False):
     runpath = os.path.dirname(sys.executable)
 else:
     runpath = os.path.abspath(os.path.dirname(__file__))
+
+max_subtitle_length = 200
+
+def crop_subtitle(subtitle):
+    if len(subtitle) >= max_subtitle_length:
+        return subtitle[:max_subtitle_length] + "..."
+    else:
+        return subtitle
 
 class SpinnerDialog(QDialog):
     def __init__(self, parent=None):
@@ -47,7 +57,7 @@ class SpinnerDialog(QDialog):
         self.movieLabel = QLabel()
         self.movie = QMovie(os.path.join(runpath, "static", "spinner.gif"))  # Path to your animated GIF
         self.movieLabel.setMovie(self.movie)
-        self.movieLabel.setFixedSize(130, 130)  # Set size for the spinner
+        self.movieLabel.setFixedSize(160, 120)  # Set size for the spinner
         self.movieLabel.setScaledContents(True)
         self.movie.start()
         layout.addWidget(self.movieLabel, alignment=Qt.AlignmentFlag.AlignCenter)
@@ -57,6 +67,9 @@ class SpinnerDialog(QDialog):
         self.styleButton(self.cancelButton)
         self.cancelButton.clicked.connect(self.cancel)
         layout.addWidget(self.cancelButton, alignment=Qt.AlignmentFlag.AlignCenter)
+
+        self.setStyleSheet("background-color: #002031;")
+        #002031
 
         self.setLayout(layout)
 
@@ -294,21 +307,19 @@ class SubtitleWidget(QWidget):
 
         self.fonts = ConfigureFonts()
 
-        self.start_label = QLabel(f'Start: {start}')
-        self.end_label = QLabel(f'End: {end}')
-        self.subtitle_label = QLabel(text)
+        self.start_label = QLabel(f'{start} --> {end}')
+        self.start_label.setFont(self.fonts.font)
+        self.subtitle_label = QLabel(text.strip())
         self.subtitle_label.setFont(self.fonts.font)
+        self.subtitle_label.setWordWrap(True)
 
-        self.start_label.setStyleSheet("font-size: 12px; color: gray;")
-        self.end_label.setStyleSheet("font-size: 12px; color: gray;")
-        self.subtitle_label.setStyleSheet("font-size: 18px; font-weight: bold; color: white;")
+        self.start_label.setStyleSheet("font-size: 14px; color: gray;")
+        self.subtitle_label.setStyleSheet("font-size: 16px; font-weight: bold; color: white;")
 
         layout.addWidget(self.start_label)
-        layout.addWidget(self.end_label)
         layout.addWidget(self.subtitle_label)
 
         self.setLayout(layout)
-
 
 
 class VideoPlayer(QWidget):
@@ -333,29 +344,16 @@ class VideoPlayer(QWidget):
         subtitle_font.setPointSize(24)
         self.subtitleBox.setFont(subtitle_font)
         self.subtitleBox.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        self.subtitleBox.setFixedHeight(50)
-
-        # Additional selected subtitle display box
-        self.selectedSubtitleBox = QLabel("")
-        self.selectedSubtitleBox.setStyleSheet("background-color: dark grey; color: white; padding: 5px;")
-        self.selectedSubtitleBox.setFont(self.fonts.mono_font)
-        self.selectedSubtitleBox.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        self.selectedSubtitleBox.setFixedHeight(50)
+        self.subtitleBox.setWordWrap(True)
+        self.subtitleBox.setFixedHeight(70)
 
         # Open Button
-        openButton = QPushButton("Video")
+        openButton = QPushButton(" Video")
         openButton.setIcon(self.style().standardIcon(QStyle.StandardPixmap.SP_DirOpenIcon))
         openButton.setIconSize(QSize(16, 16))
         openButton.clicked.connect(self.openFile)
         openButton.setFont(self.fonts.font)
         self.styleButton(openButton, double_width=True)
-
-        loadSubtitlesButton = QPushButton("Subtitles")
-        loadSubtitlesButton.setIcon(self.style().standardIcon(QStyle.StandardPixmap.SP_DirOpenIcon))
-        loadSubtitlesButton.setIconSize(QSize(16, 16))
-        loadSubtitlesButton.clicked.connect(self.loadSubtitlesManually)
-        loadSubtitlesButton.setFont(self.fonts.font)
-        self.styleButton(loadSubtitlesButton, double_width=True)
 
         # Play Button
         self.playButton = QPushButton()
@@ -364,12 +362,12 @@ class VideoPlayer(QWidget):
         self.styleButton(self.playButton)
 
         # Frame-by-Frame Buttons
-        frameForwardButton = QPushButton("+ 1")
+        frameForwardButton = QPushButton("+ 10")
         frameForwardButton.clicked.connect(self.stepFrameForward)
         frameForwardButton.setFont(self.fonts.font)
         self.styleButton(frameForwardButton, double_width=False)
 
-        frameBackwardButton = QPushButton("- 1")
+        frameBackwardButton = QPushButton("- 10")
         frameBackwardButton.clicked.connect(self.stepFrameBackward)
         frameBackwardButton.setFont(self.fonts.font)
         self.styleButton(frameBackwardButton, double_width=False)
@@ -384,17 +382,6 @@ class VideoPlayer(QWidget):
         backButton.setIcon(self.style().standardIcon(QStyle.StandardPixmap.SP_MediaSeekBackward))
         backButton.clicked.connect(self.backward)
         self.styleButton(backButton)
-
-        # Set In and Set Out buttons
-        subInButton = QPushButton("Subtitle IN")
-        subInButton.clicked.connect(self.setInPoint)
-        subInButton.setFont(self.fonts.font)
-        self.styleButton(subInButton, double_width=True)
-
-        subOutButton = QPushButton("Subtitle OUT")
-        subOutButton.clicked.connect(self.setOutPoint)
-        subOutButton.setFont(self.fonts.font)
-        self.styleButton(subOutButton, double_width=True)
 
         genSubsButton = QPushButton("AI Subtitles")
         genSubsButton.clicked.connect(self.generateSubtitles)
@@ -421,14 +408,14 @@ class VideoPlayer(QWidget):
         buttonLayout = QHBoxLayout()
         buttonLayout.setSpacing(10)
         buttonLayout.addWidget(openButton)
-        buttonLayout.addWidget(loadSubtitlesButton)
+        # buttonLayout.addWidget(loadSubtitlesButton)
         buttonLayout.addWidget(frameBackwardButton)
         buttonLayout.addWidget(backButton)
         buttonLayout.addWidget(self.playButton)
         buttonLayout.addWidget(forwardButton)
         buttonLayout.addWidget(frameForwardButton)
-        buttonLayout.addWidget(subInButton)
-        buttonLayout.addWidget(subOutButton)
+        # buttonLayout.addWidget(subInButton)
+        # buttonLayout.addWidget(subOutButton)
         buttonLayout.addWidget(genSubsButton)
 
         # Layout for transport buttons and timecode
@@ -471,7 +458,7 @@ class VideoPlayer(QWidget):
         layout = QVBoxLayout()
         layout.addWidget(splitter)
         layout.addWidget(self.subtitleBox)
-        layout.addWidget(self.selectedSubtitleBox)
+        # layout.addWidget(self.selectedSubtitleBox)
         layout.addWidget(self.slider)
         layout.addLayout(bottomLayout)
         layout.setSpacing(10)
@@ -508,6 +495,17 @@ class VideoPlayer(QWidget):
         self.subtitleBox.mouseDoubleClickEvent = self.onSubtitleDoubleClicked
 
         self.mediaPlayer.playbackStateChanged.connect(self.updateButtons)
+
+    def question_box(self, title, question):
+        reply = QMessageBox.question(
+            self, title, question,
+            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No
+        )
+
+        if reply == QMessageBox.StandardButton.Yes:
+            return True
+        else:
+            return False
 
     def openFile(self):
         """
@@ -549,7 +547,11 @@ class VideoPlayer(QWidget):
         """
         self.subtitleList.clear()  # Clear the list first
         for index, subtitle in enumerate(self.subtitles):
-            widget = SubtitleWidget(subtitle["start"], subtitle["end"], subtitle["text"])
+            widget = SubtitleWidget(
+                subtitle["start"],
+                subtitle["end"],
+                crop_subtitle(["text"][:max_subtitle_length])
+            )
             item = QListWidgetItem(self.subtitleList)
             item.setSizeHint(widget.sizeHint())
             item.setForeground(QColor('white'))
@@ -575,7 +577,7 @@ class VideoPlayer(QWidget):
 
         # Update the displayed subtitle text in the subtitle box
         subtitle_text = self.getSubtitleForTime(position)
-        self.subtitleBox.setText(subtitle_text)
+        self.subtitleBox.setText(crop_subtitle(subtitle_text[:max_subtitle_length]))
 
     def onSubtitleClicked(self, event):
         """
@@ -585,7 +587,6 @@ class VideoPlayer(QWidget):
         current_position = self.mediaPlayer.position()
         subtitle = self.getSubtitleForTime(current_position, return_full_subtitle=True)
         if subtitle:
-            self.selectedSubtitleBox.setText(f"Selected: {subtitle['start']} --> {subtitle['end']}: {subtitle['text']}")
             self.selectedSubtitle = subtitle
 
     def onSubtitleDoubleClicked(self, event):
@@ -770,13 +771,6 @@ class VideoPlayer(QWidget):
         row = self.subtitleList.row(item)
         subtitle = self.subtitles[row]
         self.selectedSubtitle = subtitle
-        # self.allow_snapping = False
-
-        # Display the selected subtitle in the additional subtitle box
-        select_subtitle_font = QFont(self.fonts.mono_font)
-        select_subtitle_font.setPointSize(16)
-        self.selectedSubtitleBox.setFont(select_subtitle_font)
-        self.selectedSubtitleBox.setText(f"Selected: {subtitle['start']} --> {subtitle['end']}: {subtitle['text']}")
 
     def editSubtitle(self, item):
         """
@@ -794,22 +788,6 @@ class VideoPlayer(QWidget):
             self.saveSubtitles()  # Save the updated subtitles
             self.populateSubtitleList()
 
-    def setInPoint(self):
-        if self.selectedSubtitle:
-            current_timecode = self.mediaPlayer.position()
-            new_start_time = QTime(0, 0, 0).addMSecs(current_timecode).toString('hh:mm:ss.zzz')
-            self.selectedSubtitle['start'] = new_start_time
-            self.populateSubtitleList()
-            self.selectedSubtitleBox.setText(f"{self.selectedSubtitle['start']} --> {self.selectedSubtitle['end']}: {self.selectedSubtitle['text']}")
-
-    def setOutPoint(self):
-        if self.selectedSubtitle:
-            current_timecode = self.mediaPlayer.position()
-            new_end_time = QTime(0, 0, 0).addMSecs(current_timecode).toString('hh:mm:ss.zzz')
-            self.selectedSubtitle['end'] = new_end_time
-            self.populateSubtitleList()
-            self.selectedSubtitleBox.setText(f"{self.selectedSubtitle['start']} --> {self.selectedSubtitle['end']}: {self.selectedSubtitle['text']}")
-
     def playPause(self):
         """
         Toggles between play and pause.
@@ -821,25 +799,22 @@ class VideoPlayer(QWidget):
             self.highlightCurrentSubtitle(current_position)
         else:
             self.mediaPlayer.play()
-            # if not self.allow_snapping:
-                # self.allow_snapping = True  # Re-enable snapping when the video plays
-
 
     def forward(self):
-        self.mediaPlayer.setPosition(self.mediaPlayer.position() + 5000)
+        self.mediaPlayer.setPosition(self.mediaPlayer.position() + 500)
 
     def backward(self):
-        self.mediaPlayer.setPosition(self.mediaPlayer.position() - 5000)
+        self.mediaPlayer.setPosition(self.mediaPlayer.position() - 500)
 
     def stepFrameForward(self):
         self.pauseVideo()
-        new_position = self.mediaPlayer.position() + int(1000 / self.frame_rate)
+        new_position = self.mediaPlayer.position() + (int(1000 / self.frame_rate) * 10)
         self.mediaPlayer.setPosition(new_position)
         self.updateTimecode(new_position)
 
     def stepFrameBackward(self):
         self.pauseVideo()
-        new_position = self.mediaPlayer.position() - int(1000 / self.frame_rate)
+        new_position = self.mediaPlayer.position() - (int(1000 / self.frame_rate) * 10)
         self.mediaPlayer.setPosition(new_position)
         self.updateTimecode(new_position)
 
@@ -913,7 +888,8 @@ class VideoPlayer(QWidget):
         self.timecodeLabel.setText(timecode)
 
         self.currentSubtitle = self.getSubtitleForTime(position)
-        self.subtitleBox.setText(self.currentSubtitle)
+        # self.subtitleBox.setText(self.currentSubtitle)
+        self.subtitleBox.setText(crop_subtitle(self.currentSubtitle[:max_subtitle_length]))
 
     def highlightCurrentSubtitle(self, position):
         """
@@ -956,6 +932,13 @@ class VideoPlayer(QWidget):
         if not self.currentFilePath:
             print("No video loaded")
             return
+
+        if len(self.subtitleList) > 0:
+            if not self.question_box(
+                "Overwrite Subtitles",
+                "Subtitles already exist, overwrite?"
+            ):
+                return
 
         try:
             self.spinner = SpinnerDialog(self)  # Create the spinner dialog
