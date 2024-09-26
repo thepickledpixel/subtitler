@@ -107,21 +107,6 @@ class SubtitleWorker:
             self.process.join()
             print("Process terminated.")
 
-# class SubtitleWorker:
-#     def __init__(self, file_path):
-#         self.file_path = file_path
-#         self.process = None
-#
-#     def start(self):
-#         self.process = Process(target=make_subtitles, args=(self.file_path,))
-#         self.process.start()
-#
-#     def stop(self):
-#         if self.process:
-#             self.process.terminate()  # Terminate the process
-#             self.process.join()  # Ensure the process is fully terminated
-#             print("Process terminated.")
-
 class ConfigureFonts():
     def __init__(self):
         # Load and set the custom font
@@ -577,25 +562,6 @@ class VideoPlayer(QWidget):
             pass
         self.subtitleList.itemDoubleClicked.connect(self.editSubtitle)
 
-    # def updateTimecode(self, position=None):
-    #     """
-    #     Update the timecode and highlight the currently playing subtitle.
-    #     """
-    #     if position is None:
-    #         position = self.mediaPlayer.position()
-    #
-    #     time = QTime(0, 0, 0).addMSecs(position)
-    #     timecode = f'{time.hour():02}:{time.minute():02}:{time.second():02},{time.msec():03}'
-    #     self.timecodeLabel.setText(timecode)
-    #
-    #     # Ensure snapping is enabled and the subtitles are highlighted
-    #     if self.allow_snapping:
-    #         self.highlightCurrentSubtitle(position)
-    #
-    #     # Update the displayed subtitleonSubtitleClicked
-    #     self.currentSubtitle = self.getSubtitleForTime(position)
-    #     self.subtitleBox.setText(self.currentSubtitle)
-
     def updateTimecode(self, position=None):
         """
         Update the timecode and display the currently playing subtitle.
@@ -985,26 +951,6 @@ class VideoPlayer(QWidget):
             self.playButton.setIcon(self.style().standardIcon(QStyle.StandardPixmap.SP_MediaPause))
         else:
             self.playButton.setIcon(self.style().standardIcon(QStyle.StandardPixmap.SP_MediaPlay))
-
-    # def generateSubtitles(self):
-    #     if not self.currentFilePath:
-    #         print("No video loaded")
-    #         return
-    #
-    #     try:
-    #         self.spinner = SpinnerDialog(self)  # Create the spinner dialog
-    #         self.spinner.show()  # Show the dialog
-    #
-    #         # Create and start the worker thread
-    #         self.worker = SubtitleWorker(self.currentFilePath)
-    #         self.worker.finished.connect(self.onSubtitlesGenerated)  # Connect signal
-    #         self.worker.start()
-    #
-    #         # Connect the cancel button to stop the worker
-    #         self.spinner.cancelButton.clicked.connect(self.worker.stop)
-    #     except Exception as e:
-    #         print(e)
-    #         return
 
     def generateSubtitles(self):
         if not self.currentFilePath:
