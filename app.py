@@ -93,14 +93,34 @@ class SubtitleWorker:
         self.process = None
 
     def start(self):
+        # Start the external process (replace `make_subtitles` with your actual script)
         self.process = Process(target=make_subtitles, args=(self.file_path,))
         self.process.start()
 
+    def is_finished(self):
+        # Check if the process has finished
+        return self.process and not self.process.is_alive()
+
     def stop(self):
         if self.process:
-            self.process.terminate()  # Terminate the process
-            self.process.join()  # Ensure the process is fully terminated
+            self.process.terminate()
+            self.process.join()
             print("Process terminated.")
+
+# class SubtitleWorker:
+#     def __init__(self, file_path):
+#         self.file_path = file_path
+#         self.process = None
+#
+#     def start(self):
+#         self.process = Process(target=make_subtitles, args=(self.file_path,))
+#         self.process.start()
+#
+#     def stop(self):
+#         if self.process:
+#             self.process.terminate()  # Terminate the process
+#             self.process.join()  # Ensure the process is fully terminated
+#             print("Process terminated.")
 
 class ConfigureFonts():
     def __init__(self):
@@ -499,6 +519,9 @@ class VideoPlayer(QWidget):
         self.selectedSubtitle = None
         # self.allow_snapping = False
 
+        self.subtitleBox.mousePressEvent = self.onSubtitleClicked  # Link mouse press event to single click handler
+        self.subtitleBox.mouseDoubleClickEvent = self.onSubtitleDoubleClicked
+
         self.mediaPlayer.playbackStateChanged.connect(self.updateButtons)
 
     def openFile(self):
@@ -554,9 +577,28 @@ class VideoPlayer(QWidget):
             pass
         self.subtitleList.itemDoubleClicked.connect(self.editSubtitle)
 
+    # def updateTimecode(self, position=None):
+    #     """
+    #     Update the timecode and highlight the currently playing subtitle.
+    #     """
+    #     if position is None:
+    #         position = self.mediaPlayer.position()
+    #
+    #     time = QTime(0, 0, 0).addMSecs(position)
+    #     timecode = f'{time.hour():02}:{time.minute():02}:{time.second():02},{time.msec():03}'
+    #     self.timecodeLabel.setText(timecode)
+    #
+    #     # Ensure snapping is enabled and the subtitles are highlighted
+    #     if self.allow_snapping:
+    #         self.highlightCurrentSubtitle(position)
+    #
+    #     # Update the displayed subtitleonSubtitleClicked
+    #     self.currentSubtitle = self.getSubtitleForTime(position)
+    #     self.subtitleBox.setText(self.currentSubtitle)
+
     def updateTimecode(self, position=None):
         """
-        Update the timecode and highlight the currently playing subtitle.
+        Update the timecode and display the currently playing subtitle.
         """
         if position is None:
             position = self.mediaPlayer.position()
@@ -565,14 +607,44 @@ class VideoPlayer(QWidget):
         timecode = f'{time.hour():02}:{time.minute():02}:{time.second():02},{time.msec():03}'
         self.timecodeLabel.setText(timecode)
 
-        # Ensure snapping is enabled and the subtitles are highlighted
-        if self.allow_snapping:
-            self.highlightCurrentSubtitle(position)
+        # Update the displayed subtitle text in the subtitle box
+        subtitle_text = self.getSubtitleForTime(position)
+        self.subtitleBox.setText(subtitle_text)
 
-        # Update the displayed subtitle
-        self.currentSubtitle = self.getSubtitleForTime(position)
-        self.subtitleBox.setText(self.currentSubtitle)
+    def onSubtitleClicked(self, event):
+        """
+        Handle single click on the currently playing subtitle.
+        Update the selected subtitle box to show the current subtitle's start and end time.
+        """
+        current_position = self.mediaPlayer.position()
+        subtitle = self.getSubtitleForTime(current_position, return_full_subtitle=True)
+        if subtitle:
+            self.selectedSubtitleBox.setText(f"Selected: {subtitle['start']} --> {subtitle['end']}: {subtitle['text']}")
+            self.selectedSubtitle = subtitle
 
+    def onSubtitleDoubleClicked(self, event):
+        """
+        Handle double-click on the currently playing subtitle.
+        Open the EditSubtitleDialog for the current subtitle.
+        """
+        current_position = self.mediaPlayer.position()
+        subtitle = self.getSubtitleForTime(current_position, return_full_subtitle=True)
+        if subtitle:
+            self.editSubtitleForCurrent(subtitle)
+
+    def editSubtitleForCurrent(self, subtitle):
+        """
+        Open the edit subtitle dialog for the given subtitle.
+        """
+        dialog = EditSubtitleDialog(subtitle, video_duration_ms=self.duration)
+        result = dialog.exec()
+
+        if result == QDialog.DialogCode.Accepted:
+            updated_values = dialog.getValues()
+            # Update the current subtitle with the new values
+            subtitle.update(updated_values)
+            self.saveSubtitles()  # Save the updated subtitles
+            self.populateSubtitleList()
 
     def highlightCurrentSubtitle(self, position):
         """
@@ -874,9 +946,6 @@ class VideoPlayer(QWidget):
         timecode = f'{time.hour():02}:{time.minute():02}:{time.second():02},{time.msec():03}'
         self.timecodeLabel.setText(timecode)
 
-        # if self.allow_snapping:
-        #     self.highlightCurrentSubtitle(position)
-
         self.currentSubtitle = self.getSubtitleForTime(position)
         self.subtitleBox.setText(self.currentSubtitle)
 
@@ -892,17 +961,21 @@ class VideoPlayer(QWidget):
                 self.subtitleList.setCurrentRow(index)
                 break
 
-    def getSubtitleForTime(self, position):
+    def getSubtitleForTime(self, position, return_full_subtitle=False):
         """
-        Retrieve the subtitle text for the given playhead position.
+        Retrieve the subtitle for the current playhead position.
+
+        :param position: The current video position in milliseconds.
+        :param return_full_subtitle: If True, return the full subtitle object. If False, return only the subtitle text.
+        :return: The subtitle text or the full subtitle object.
         """
         current_time = QTime(0, 0, 0).addMSecs(position)
         for subtitle in self.subtitles:
             start_time = QTime.fromString(subtitle['start'], 'hh:mm:ss.zzz')
             end_time = QTime.fromString(subtitle['end'], 'hh:mm:ss.zzz')
             if start_time <= current_time <= end_time:
-                return subtitle['text']
-        return ""
+                return subtitle if return_full_subtitle else subtitle['text']
+        return None if return_full_subtitle else ""  # Return empty string for text if no subtitle is found
 
     def updateButtons(self, status=None):
         """
@@ -913,6 +986,26 @@ class VideoPlayer(QWidget):
         else:
             self.playButton.setIcon(self.style().standardIcon(QStyle.StandardPixmap.SP_MediaPlay))
 
+    # def generateSubtitles(self):
+    #     if not self.currentFilePath:
+    #         print("No video loaded")
+    #         return
+    #
+    #     try:
+    #         self.spinner = SpinnerDialog(self)  # Create the spinner dialog
+    #         self.spinner.show()  # Show the dialog
+    #
+    #         # Create and start the worker thread
+    #         self.worker = SubtitleWorker(self.currentFilePath)
+    #         self.worker.finished.connect(self.onSubtitlesGenerated)  # Connect signal
+    #         self.worker.start()
+    #
+    #         # Connect the cancel button to stop the worker
+    #         self.spinner.cancelButton.clicked.connect(self.worker.stop)
+    #     except Exception as e:
+    #         print(e)
+    #         return
+
     def generateSubtitles(self):
         if not self.currentFilePath:
             print("No video loaded")
@@ -922,16 +1015,26 @@ class VideoPlayer(QWidget):
             self.spinner = SpinnerDialog(self)  # Create the spinner dialog
             self.spinner.show()  # Show the dialog
 
-            # Create and start the worker thread
+            # Create the worker and start the external process
             self.worker = SubtitleWorker(self.currentFilePath)
-            # self.worker.finished.connect(self.onSubtitlesGenerated)  # Connect signal
             self.worker.start()
+
+            # Create a QTimer to check periodically if the process has finished
+            self.poll_timer = QTimer(self)
+            self.poll_timer.timeout.connect(self.checkProcessCompletion)
+            self.poll_timer.start(500)  # Check every 500 milliseconds
 
             # Connect the cancel button to stop the worker
             self.spinner.cancelButton.clicked.connect(self.worker.stop)
         except Exception as e:
-            print(e)
-            return
+            print(f"Error: {e}")
+
+    def checkProcessCompletion(self):
+        """Periodically checks if the subtitle generation process has finished."""
+        if self.worker.is_finished():
+            self.poll_timer.stop()  # Stop the timer
+            self.onSubtitlesGenerated()  # Process completion callback
+
 
     def onSubtitlesGenerated(self):
         try:

@@ -7,6 +7,8 @@ import logging
 import warnings
 from faster_whisper import WhisperModel
 
+os.environ["KMP_DUPLICATE_LIB_OK"] = "TRUE"
+
 # Set up basic logging
 logger = logging.getLogger()
 logging.basicConfig(level=logging.INFO)
