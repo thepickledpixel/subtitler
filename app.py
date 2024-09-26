@@ -179,14 +179,16 @@ class AddSubtitleDialog(QDialog):
         }
 
 class EditSubtitleDialog(QDialog):
-    def __init__(self, subtitle, parent=None):
-
+    def __init__(self, subtitle, video_duration_ms, parent=None):
         fonts = ConfigureFonts()
 
         super().__init__(parent)
         self.setWindowTitle("Edit Subtitle")
         self.resize(400, 200)
 
+        self.video_duration_ms = video_duration_ms  # Video duration in milliseconds
+
+        # Create start time and end time editors
         self.start_time_edit = QTimeEdit(QTime.fromString(subtitle['start'], 'hh:mm:ss.zzz'))
         self.end_time_edit = QTimeEdit(QTime.fromString(subtitle['end'], 'hh:mm:ss.zzz'))
         self.start_time_edit.setDisplayFormat("hh:mm:ss.zzz")
@@ -197,20 +199,39 @@ class EditSubtitleDialog(QDialog):
         self.text_edit = QTextEdit(subtitle['text'])
         self.start_time_edit.setFixedWidth(150)
         self.end_time_edit.setFixedWidth(150)
-
         self.text_edit.setFixedWidth(400)
         self.text_edit.setFixedHeight(200)
 
-        new_font = QFont(fonts.font)  # Copy the current font
+        new_font = QFont(fonts.font)
         new_font.setPointSize(24)
-
         self.text_edit.setFont(new_font)
 
+        # Create nudge buttons for start time
+        start_nudge_layout = QHBoxLayout()
+        nudge_back_start_btn = QPushButton("- Nudge")
+        nudge_back_start_btn.clicked.connect(self.nudgeStartBack)
+        nudge_forward_start_btn = QPushButton("+ Nudge")
+        nudge_forward_start_btn.clicked.connect(self.nudgeStartForward)
+        start_nudge_layout.addWidget(self.start_time_edit)
+        start_nudge_layout.addWidget(nudge_back_start_btn)
+        start_nudge_layout.addWidget(nudge_forward_start_btn)
+
+        # Create nudge buttons for end time
+        end_nudge_layout = QHBoxLayout()
+        nudge_back_end_btn = QPushButton("- Nudge")
+        nudge_back_end_btn.clicked.connect(self.nudgeEndBack)
+        nudge_forward_end_btn = QPushButton("+ Nudge")
+        nudge_forward_end_btn.clicked.connect(self.nudgeEndForward)
+        end_nudge_layout.addWidget(self.end_time_edit)
+        end_nudge_layout.addWidget(nudge_back_end_btn)
+        end_nudge_layout.addWidget(nudge_forward_end_btn)
+
         layout = QFormLayout()
-        layout.addRow(QLabel("Start Time:", font=fonts.font), self.start_time_edit)
-        layout.addRow(QLabel("End Time:", font=fonts.font), self.end_time_edit)
+        layout.addRow(QLabel("Start Time:", font=fonts.font), start_nudge_layout)
+        layout.addRow(QLabel("End Time:", font=fonts.font), end_nudge_layout)
         layout.addRow(QLabel("Text:", font=fonts.font), self.text_edit)
 
+        # OK and Cancel buttons
         ok_button = QPushButton("OK")
         cancel_button = QPushButton("Cancel")
         ok_button.clicked.connect(self.accept)
@@ -222,13 +243,43 @@ class EditSubtitleDialog(QDialog):
         self.setLayout(layout)
         self.text_edit.setFocus()
 
+    # Helper function to get milliseconds from QTime
+    def time_to_milliseconds(self, qtime):
+        return QTime(0, 0, 0).msecsTo(qtime)
+
+    def milliseconds_to_time(self, ms):
+        return QTime(0, 0, 0).addMSecs(int(ms))
+
+    # Function to nudge start time back by 500ms
+    def nudgeStartBack(self):
+        current_time_ms = self.time_to_milliseconds(self.start_time_edit.time())
+        new_time_ms = max(current_time_ms - 500, 0)  # Ensure time doesn't go below 0
+        self.start_time_edit.setTime(self.milliseconds_to_time(new_time_ms))
+
+    # Function to nudge start time forward by 500ms
+    def nudgeStartForward(self):
+        current_time_ms = self.time_to_milliseconds(self.start_time_edit.time())
+        new_time_ms = min(current_time_ms + 500, self.video_duration_ms)
+        self.start_time_edit.setTime(self.milliseconds_to_time(new_time_ms))
+
+    # Function to nudge end time back by 500ms
+    def nudgeEndBack(self):
+        current_time_ms = self.time_to_milliseconds(self.end_time_edit.time())
+        new_time_ms = max(current_time_ms - 500, 0)  # Ensure time doesn't go below 0
+        self.end_time_edit.setTime(self.milliseconds_to_time(new_time_ms))
+
+    # Function to nudge end time forward by 500ms
+    def nudgeEndForward(self):
+        current_time_ms = self.time_to_milliseconds(self.end_time_edit.time())
+        new_time_ms = min(current_time_ms + 500, self.video_duration_ms)
+        self.end_time_edit.setTime(self.milliseconds_to_time(new_time_ms))
+
     def getValues(self):
         return {
             'start': self.start_time_edit.time().toString('hh:mm:ss.zzz'),
             'end': self.end_time_edit.time().toString('hh:mm:ss.zzz'),
             'text': self.text_edit.toPlainText()
         }
-
 
 class SubtitleWidget(QWidget):
     def __init__(self, start, end, text):
@@ -463,6 +514,13 @@ class VideoPlayer(QWidget):
 
             video = cv2.VideoCapture(fileName)
             self.frame_rate = video.get(cv2.CAP_PROP_FPS)
+
+               # Get the total number of frames
+            frame_count = video.get(cv2.CAP_PROP_FRAME_COUNT)
+
+            # Calculate video duration in milliseconds
+            self.duration = (frame_count / self.frame_rate) * 1000 if self.frame_rate > 0 else 0
+
             video.release()
 
             self.subtitleFilePath = os.path.splitext(fileName)[0] + ".json"
@@ -607,15 +665,41 @@ class VideoPlayer(QWidget):
             self.subtitleFilePath = fileName  # Set the subtitle file path to the manually loaded file
             self.loadSubtitles()  # Load the selected subtitle file
 
+    # Helper function to get milliseconds from QTime
+    def time_to_milliseconds(self, qtime):
+        return QTime(0, 0, 0).msecsTo(qtime)
+
+    def milliseconds_to_time(self, ms):
+        return QTime(0, 0, 0).addMSecs(int(ms))
+
     def saveSubtitles(self):
         """
-        Save subtitles to the JSON file.
+        Save subtitles to the JSON file, ensuring no overlaps.
         """
         if self.subtitleFilePath:
             try:
+                # Sort the subtitles by their start times (in milliseconds)
+                self.subtitles.sort(key=lambda sub: self.time_to_milliseconds(QTime.fromString(sub['start'], 'hh:mm:ss.zzz')))
+
+                # Ensure no overlaps
+                for i in range(len(self.subtitles) - 1):
+                    current_sub = self.subtitles[i]
+                    next_sub = self.subtitles[i + 1]
+
+                    # Convert start and end times to milliseconds
+                    current_end_ms = self.time_to_milliseconds(QTime.fromString(current_sub['end'], 'hh:mm:ss.zzz'))
+                    next_start_ms = self.time_to_milliseconds(QTime.fromString(next_sub['start'], 'hh:mm:ss.zzz'))
+
+                    # If current subtitle's end time overlaps with the next subtitle's start time, truncate it
+                    if current_end_ms >= next_start_ms:
+                        truncated_end_ms = max(next_start_ms - 1, 0)  # Ensure end is slightly before the next start
+                        current_sub['end'] = self.milliseconds_to_time(truncated_end_ms).toString('hh:mm:ss.zzz')
+
+                # Save the subtitles to file
                 with open(self.subtitleFilePath, 'w') as file:
                     json.dump(self.subtitles, file, indent=4)
                 print(f"Subtitles saved to {self.subtitleFilePath}")
+
             except Exception as e:
                 print(f"Error saving subtitles: {e}")
 
@@ -663,14 +747,14 @@ class VideoPlayer(QWidget):
         row = self.subtitleList.row(item)
         subtitle = self.subtitles[row]
 
-        edit_dialog = EditSubtitleDialog(subtitle, self)
-        result = edit_dialog.exec()
+        dialog = EditSubtitleDialog(subtitle, video_duration_ms=self.duration)
+        result = dialog.exec()
 
         if result == QDialog.DialogCode.Accepted:
-            updated_values = edit_dialog.getValues()
+            updated_values = dialog.getValues()
             self.subtitles[row] = updated_values
-            self.populateSubtitleList()
             self.saveSubtitles()  # Save the updated subtitles
+            self.populateSubtitleList()
 
     def setInPoint(self):
         if self.selectedSubtitle:
