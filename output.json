@@ -1,0 +1,47 @@
+[
+    {
+        "start": "00:00:00,000",
+        "end": "00:00:02,500",
+        "text": "Welcome to the Example Subtitle File!"
+    },
+    {
+        "start": "00:00:03,000",
+        "end": "00:00:06,000",
+        "text": "This is a demonstration of SRT subtitles."
+    },
+    {
+        "start": "00:00:07,000",
+        "end": "00:00:10,500",
+        "text": "You can use SRT files to add subtitles to your videos."
+    },
+    {
+        "start": "00:00:12,000",
+        "end": "00:00:15,000",
+        "text": "Each subtitle entry consists of a number, a timecode, and the subtitle text."
+    },
+    {
+        "start": "00:00:16,000",
+        "end": "00:00:20,000",
+        "text": "The timecode format is hours:minutes:seconds,milliseconds."
+    },
+    {
+        "start": "00:00:21,000",
+        "end": "00:00:25,000",
+        "text": "You can adjust the timing to match your video."
+    },
+    {
+        "start": "00:00:26,000",
+        "end": "00:00:30,000",
+        "text": "Make sure the subtitle text is clear and readable."
+    },
+    {
+        "start": "00:00:31,000",
+        "end": "00:00:35,000",
+        "text": "And that's how you create an SRT subtitle file!"
+    },
+    {
+        "start": "00:00:36,000",
+        "end": "00:00:40,000",
+        "text": "Enjoy adding subtitles to your videos!"
+    }
+]
