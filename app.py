@@ -24,7 +24,7 @@ if getattr(sys, 'frozen', False):
 else:
     runpath = os.path.abspath(os.path.dirname(__file__))
 
-max_subtitle_length = 2000
+max_subtitle_length = 200
 
 def crop_subtitle(subtitle):
     if len(subtitle) >= max_subtitle_length:
@@ -308,7 +308,7 @@ class SubtitleWidget(QWidget):
         self.fonts = ConfigureFonts()
 
         self.start_label = QLabel(f'{start} --> {end}')
-        self.start_label.setFont(self.fonts.font)
+        self.start_label.setFont(self.fonts.mono_font)
         self.subtitle_label = QLabel(text.strip())
         self.subtitle_label.setFont(self.fonts.font)
         self.subtitle_label.setWordWrap(True)
@@ -371,16 +371,16 @@ class VideoPlayer(QWidget):
         self.playButton.clicked.connect(self.playPause)
         self.styleButton(self.playButton)
 
-        # Frame-by-Frame Buttons
-        frameForwardButton = QPushButton("+ 10")
-        frameForwardButton.clicked.connect(self.stepFrameForward)
-        frameForwardButton.setFont(self.fonts.font)
-        self.styleButton(frameForwardButton, double_width=False)
+        # # Frame-by-Frame Buttons
+        # frameForwardButton = QPushButton("+ 10")
+        # frameForwardButton.clicked.connect(self.stepFrameForward)
+        # frameForwardButton.setFont(self.fonts.font)
+        # self.styleButton(frameForwardButton, double_width=False)
 
-        frameBackwardButton = QPushButton("- 10")
-        frameBackwardButton.clicked.connect(self.stepFrameBackward)
-        frameBackwardButton.setFont(self.fonts.font)
-        self.styleButton(frameBackwardButton, double_width=False)
+        # frameBackwardButton = QPushButton("- 10")
+        # frameBackwardButton.clicked.connect(self.stepFrameBackward)
+        # frameBackwardButton.setFont(self.fonts.font)
+        # self.styleButton(frameBackwardButton, double_width=False)
 
         # Fast Forward and Rewind Buttons
         forwardButton = QPushButton()
@@ -398,7 +398,7 @@ class VideoPlayer(QWidget):
         genSubsButton.setFont(self.fonts.font)
         self.styleButton(genSubsButton, double_width=True)
 
-        hideListButton = QPushButton("Hide Subs")
+        hideListButton = QPushButton("Hide List")
         hideListButton.clicked.connect(self.toggleSubtitleList)
         hideListButton.setFont(self.fonts.font)
         self.styleButton(hideListButton, double_width=True)
@@ -411,7 +411,7 @@ class VideoPlayer(QWidget):
         timecode_font.setPointSize(24)
         self.timecodeLabel.setFont(timecode_font)
         self.timecodeLabel.setFixedHeight(50)
-        self.timecodeLabel.setAlignment(Qt.AlignmentFlag.AlignCenter | Qt.AlignmentFlag.AlignVCenter)
+        self.timecodeLabel.setAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
 
         # Slider
         self.slider = QSlider(Qt.Orientation.Horizontal)
@@ -426,11 +426,11 @@ class VideoPlayer(QWidget):
         buttonLayout.addWidget(openButton)
         buttonLayout.addWidget(importButton)
         buttonLayout.addWidget(exportButton)
-        buttonLayout.addWidget(frameBackwardButton)
+        # buttonLayout.addWidget(frameBackwardButton)
         buttonLayout.addWidget(backButton)
         buttonLayout.addWidget(self.playButton)
         buttonLayout.addWidget(forwardButton)
-        buttonLayout.addWidget(frameForwardButton)
+        # buttonLayout.addWidget(frameForwardButton)
         buttonLayout.addWidget(genSubsButton)
         buttonLayout.addWidget(hideListButton)
 
@@ -536,11 +536,11 @@ class VideoPlayer(QWidget):
         if self.subtitleWidgetExpanded:
             # Collapse the subtitle panel by shrinking its size
             self.splitter.setSizes([1, 0])  # Shrink the subtitle panel to 0
-            self.hideListButton.setText("Show Subs")
+            self.hideListButton.setText("Show List")
         else:
             # Restore the subtitle panel
             self.splitter.setSizes([800, 300])  # Restore the original size
-            self.hideListButton.setText("Hide Subs")
+            self.hideListButton.setText("Hide List")
 
         # Toggle the state
         self.subtitleWidgetExpanded = not self.subtitleWidgetExpanded
@@ -649,7 +649,7 @@ class VideoPlayer(QWidget):
             widget = SubtitleWidget(
                 subtitle["start"],
                 subtitle["end"],
-                crop_subtitle(["text"][:max_subtitle_length])
+                crop_subtitle(subtitle["text"])
             )
             item = QListWidgetItem(self.subtitleList)
             item.setSizeHint(widget.sizeHint())
@@ -850,26 +850,26 @@ class VideoPlayer(QWidget):
             except Exception as e:
                 print(f"Error saving subtitles: {e}")
 
-    def populateSubtitleList(self):
-        """
-        Populate the subtitle list widget from the subtitles.
-        Clears the list if no subtitles are available.
-        """
-        self.subtitleList.clear()  # Clear the list first
-        for index, subtitle in enumerate(self.subtitles):
-            widget = SubtitleWidget(subtitle["start"], subtitle["end"], subtitle["text"])
-            item = QListWidgetItem(self.subtitleList)
-            item.setSizeHint(widget.sizeHint())
-            item.setForeground(QColor('white'))
-            self.subtitleList.setItemWidget(item, widget)
-
-        try:
-            self.subtitleList.itemDoubleClicked.disconnect(self.editSubtitle)
-        except TypeError:
-            pass  # Signal was not connected before, so nothing to disconnect
-
-        self.subtitleList.itemDoubleClicked.connect(self.editSubtitle)
-        self.subtitleList.itemClicked.connect(self.selectSubtitle)
+    # def populateSubtitleList(self):
+    #     """
+    #     Populate the subtitle list widget from the subtitles.
+    #     Clears the list if no subtitles are available.
+    #     """
+    #     self.subtitleList.clear()  # Clear the list first
+    #     for index, subtitle in enumerate(self.subtitles):
+    #         widget = SubtitleWidget(subtitle["start"], subtitle["end"], subtitle["text"])
+    #         item = QListWidgetItem(self.subtitleList)
+    #         item.setSizeHint(widget.sizeHint())
+    #         item.setForeground(QColor('white'))
+    #         self.subtitleList.setItemWidget(item, widget)
+    #
+    #     try:
+    #         self.subtitleList.itemDoubleClicked.disconnect(self.editSubtitle)
+    #     except TypeError:
+    #         pass  # Signal was not connected before, so nothing to disconnect
+    #
+    #     self.subtitleList.itemDoubleClicked.connect(self.editSubtitle)
+    #     self.subtitleList.itemClicked.connect(self.selectSubtitle)
 
     def selectSubtitle(self, item):
         """
