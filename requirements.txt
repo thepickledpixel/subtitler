@@ -1,3 +1,4 @@
 pysrt
 webvtt-py
 pysubs2
+pycaption

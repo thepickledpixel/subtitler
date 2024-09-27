@@ -6,8 +6,8 @@ import webvtt
 import argparse
 
 from datetime import timedelta
-from pysrt import SubRipFile, SubRipItem
-from pysubs2 import SSAFile
+from pysrt import SubRipFile, SubRipItem, SubRipTime
+from pysubs2 import SSAFile, SSAEvent  # Import SSAEvent for creating events
 
 if getattr(sys, 'frozen', False):
     runpath = os.path.dirname(sys.executable)
@@ -16,6 +16,7 @@ else:
 
 # Function to convert timecodes from string to timedelta
 def parse_timecode(timecode):
+    timecode = timecode.replace(",", ".")  # Support both comma and dot formats for milliseconds
     parts = timecode.split(':')
     seconds = float(parts[-1])
     minutes = int(parts[-2])
@@ -145,23 +146,41 @@ def export_subtitle(subtitles, file_path):
         export_srt(subtitles, file_path)
     elif extension == '.vtt':
         export_vtt(subtitles, file_path)
-    elif extension == '.ass':
+    elif extension == '.ass': # NOT WORKING IN VLC
         export_ass(subtitles, file_path)
     elif extension == '.sbv':
         export_sbv(subtitles, file_path)
     elif extension == '.lrc':
         export_lrc(subtitles, file_path)
+    elif extension == '.stl':
+        export_stl(subtitles, file_path)
     else:
         raise ValueError(f"Unsupported file extension: {extension}")
+
+# Function to properly format the timecode for SRT (converting milliseconds with a comma)
+def format_timecode_srt(timecode_str):
+    # Convert timecode to use comma for milliseconds (SRT format)
+    return timecode_str.replace(".", ",")
+
+# Function to convert a time string (HH:MM:SS,MS) to SubRipTime object
+def timecode_to_subrip_time(timecode_str):
+    timecode_str = format_timecode_srt(timecode_str)  # Ensure correct format with comma for milliseconds
+    hours, minutes, rest = timecode_str.split(":")
+    seconds, milliseconds = rest.split(",")
+    return SubRipTime(int(hours), int(minutes), int(seconds), int(milliseconds))
 
 # Export SRT
 def export_srt(subtitles, file_path):
     srt_data = SubRipFile()
     for i, subtitle in enumerate(subtitles):
-        start = SubRipItem.time_from_string(subtitle['start'])
-        end = SubRipItem.time_from_string(subtitle['end'])
-        srt_item = SubRipItem(index=i+1, start=start, end=end, text=subtitle['text'])
+        # Convert the start and end timecodes to SubRipTime objects
+        start = timecode_to_subrip_time(subtitle['start'])
+        end = timecode_to_subrip_time(subtitle['end'])
+
+        # Create a SubRipItem for each subtitle and add to the SubRipFile
+        srt_item = SubRipItem(index=i + 1, start=start, end=end, text=subtitle['text'])
         srt_data.append(srt_item)
+
     srt_data.save(file_path)
 
 # Export VTT
@@ -172,18 +191,34 @@ def export_vtt(subtitles, file_path):
             file.write(f"{subtitle['start']} --> {subtitle['end']}\n")
             file.write(f"{subtitle['text']}\n\n")
 
-# Export ASS
+# Export ASS (with SSAEvent conversion)
 def export_ass(subtitles, file_path):
     ass = SSAFile()
     for subtitle in subtitles:
         start = parse_timecode(subtitle['start']).total_seconds()
         end = parse_timecode(subtitle['end']).total_seconds()
-        ass.events.append({
-            "start": start,
-            "end": end,
-            "text": subtitle['text']
-        })
+
+        # Create SSAEvent for each subtitle
+        event = SSAEvent(start=start, end=end, text=subtitle['text'])
+        ass.events.append(event)
+
     ass.save(file_path)
+
+# Export STL (Spruce Subtitle Format)
+def export_stl(subtitles, file_path):
+    with open(file_path, 'wb') as file:
+        # A basic STL header (can be improved)
+        header = bytearray(1024)
+        header[0:3] = b'STL'
+        file.write(header)
+
+        for subtitle in subtitles:
+            # Example conversion for subtitle data (improvised for demo purposes)
+            start = parse_timecode(subtitle['start'])
+            end = parse_timecode(subtitle['end'])
+            text = subtitle['text'][:112]  # Limit to 112 chars for STL compatibility
+            entry = f"{start} --> {end}: {text}\n".encode('ascii')
+            file.write(entry)
 
 # Export SBV
 def export_sbv(subtitles, file_path):
