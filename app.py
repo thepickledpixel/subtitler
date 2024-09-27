@@ -48,7 +48,7 @@ class SpinnerDialog(QDialog):
         layout.setAlignment(Qt.AlignmentFlag.AlignCenter)  # Center the contents vertically
 
         # Create and set up the animated spinner
-        self.spinnerLabel = QLabel("Generating Subtitles...")
+        self.spinnerLabel = QLabel("Generating AI Subs...")
         spinner_font = QFont(self.fonts.font)
         spinner_font.setPointSize(24)
         self.spinnerLabel.setFont(spinner_font)
@@ -69,9 +69,9 @@ class SpinnerDialog(QDialog):
         layout.addWidget(self.cancelButton, alignment=Qt.AlignmentFlag.AlignCenter)
 
         self.setStyleSheet("background-color: #002031;")
-        #002031
 
         self.setLayout(layout)
+
 
     def styleButton(self, button):
         width = 100 # Doubled the width for Sub IN/OUT buttons
@@ -355,6 +355,16 @@ class VideoPlayer(QWidget):
         openButton.setFont(self.fonts.font)
         self.styleButton(openButton, double_width=True)
 
+        importButton = QPushButton("Import Subs")
+        importButton.clicked.connect(self.openFile)
+        importButton.setFont(self.fonts.font)
+        self.styleButton(importButton, double_width=True)
+
+        exportButton = QPushButton("Export Subs")
+        exportButton.clicked.connect(self.openFile)
+        exportButton.setFont(self.fonts.font)
+        self.styleButton(exportButton, double_width=True)
+
         # Play Button
         self.playButton = QPushButton()
         self.playButton.setIcon(self.style().standardIcon(QStyle.StandardPixmap.SP_MediaPlay))
@@ -383,10 +393,16 @@ class VideoPlayer(QWidget):
         backButton.clicked.connect(self.backward)
         self.styleButton(backButton)
 
-        genSubsButton = QPushButton("AI Subtitles")
+        genSubsButton = QPushButton("Generate Subs")
         genSubsButton.clicked.connect(self.generateSubtitles)
         genSubsButton.setFont(self.fonts.font)
         self.styleButton(genSubsButton, double_width=True)
+
+        hideListButton = QPushButton("Hide Subs")
+        hideListButton.clicked.connect(self.toggleSubtitleList)
+        hideListButton.setFont(self.fonts.font)
+        self.styleButton(hideListButton, double_width=True)
+        hideListButton.setFixedWidth(120)  # You can adjust the width
 
         # Timecode Label
         self.timecodeLabel = QLabel("00:00:00,000")
@@ -408,15 +424,15 @@ class VideoPlayer(QWidget):
         buttonLayout = QHBoxLayout()
         buttonLayout.setSpacing(10)
         buttonLayout.addWidget(openButton)
-        # buttonLayout.addWidget(loadSubtitlesButton)
+        buttonLayout.addWidget(importButton)
+        buttonLayout.addWidget(exportButton)
         buttonLayout.addWidget(frameBackwardButton)
         buttonLayout.addWidget(backButton)
         buttonLayout.addWidget(self.playButton)
         buttonLayout.addWidget(forwardButton)
         buttonLayout.addWidget(frameForwardButton)
-        # buttonLayout.addWidget(subInButton)
-        # buttonLayout.addWidget(subOutButton)
         buttonLayout.addWidget(genSubsButton)
+        buttonLayout.addWidget(hideListButton)
 
         # Layout for transport buttons and timecode
         bottomLayout = QHBoxLayout()
@@ -440,23 +456,26 @@ class VideoPlayer(QWidget):
         deleteSubtitleButton.setFixedWidth(200)
 
         subtitleButtonLayout = QHBoxLayout()
+        # subtitleButtonLayout.addWidget(hideListButton)
         subtitleButtonLayout.addWidget(addSubtitleButton)
         subtitleButtonLayout.addWidget(deleteSubtitleButton)
 
         # Splitter to separate video and playlist
-        splitter = QSplitter(Qt.Orientation.Horizontal)
-        splitter.addWidget(self.videoWidget)
+        self.splitter = QSplitter(Qt.Orientation.Horizontal)
+        self.splitter.addWidget(self.videoWidget)
         subtitleLayout = QVBoxLayout()
         subtitleLayout.addWidget(self.subtitleList)
         subtitleLayout.addLayout(subtitleButtonLayout)
         subtitleWidget = QWidget()
         subtitleWidget.setLayout(subtitleLayout)
-        splitter.addWidget(subtitleWidget)
-        splitter.setSizes([800, 300])
+        self.splitter.addWidget(subtitleWidget)
+        self.splitter.setSizes([800, 300])
+
+
 
         # Main layout
         layout = QVBoxLayout()
-        layout.addWidget(splitter)
+        layout.addWidget(self.splitter)
         layout.addWidget(self.subtitleBox)
         # layout.addWidget(self.selectedSubtitleBox)
         layout.addWidget(self.slider)
@@ -469,9 +488,14 @@ class VideoPlayer(QWidget):
         self.subtitleFilePath = None
         self.duration = 0
 
+        self.subtitleWidget = subtitleWidget  # Store reference to the subtitle widget for toggling
+        self.hideListButton = hideListButton
+
         self.setLayout(layout)
-        self.setWindowTitle("Smart Subs")
+        self.setWindowTitle("Smart Subs by Pickled Pixel")
         self.setGeometry(100, 100, 1000, 600)
+
+        self.subtitleWidgetExpanded = True
 
         # Media Player Settings
         self.mediaPlayer.setVideoOutput(self.videoWidget)
@@ -507,6 +531,19 @@ class VideoPlayer(QWidget):
             self.backward()  # Left arrow to rewind
         elif event.key() == Qt.Key.Key_Right:
             self.forward()  # Right arrow to fast forward
+
+    def toggleSubtitleList(self):
+        if self.subtitleWidgetExpanded:
+            # Collapse the subtitle panel by shrinking its size
+            self.splitter.setSizes([1, 0])  # Shrink the subtitle panel to 0
+            self.hideListButton.setText("Show Subs")
+        else:
+            # Restore the subtitle panel
+            self.splitter.setSizes([800, 300])  # Restore the original size
+            self.hideListButton.setText("Hide Subs")
+
+        # Toggle the state
+        self.subtitleWidgetExpanded = not self.subtitleWidgetExpanded
 
     def adjustFontSizeToFit(self, text):
         """
@@ -701,7 +738,7 @@ class VideoPlayer(QWidget):
                 print(f"Error loading subtitles: {e}")
 
     def styleButton(self, button, double_width=False):
-        width = 100 if double_width else 50  # Doubled the width for Sub IN/OUT buttons
+        width = 120 if double_width else 50  # Doubled the width for Sub IN/OUT buttons
         height = 40
         button.setStyleSheet("""
             QPushButton {

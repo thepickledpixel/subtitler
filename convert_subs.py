@@ -4,10 +4,10 @@ import re
 import sys
 import webvtt
 import argparse
-
 from datetime import timedelta
+from pycaption import CaptionConverter, EBUSTLReader, EBUSTLWriter, CaptionSet
 from pysrt import SubRipFile, SubRipItem, SubRipTime
-from pysubs2 import SSAFile, SSAEvent  # Import SSAEvent for creating events
+from pysubs2 import SSAFile, SSAEvent
 
 if getattr(sys, 'frozen', False):
     runpath = os.path.dirname(sys.executable)
@@ -45,8 +45,36 @@ def load_subtitle(file_path):
         return load_sbv(file_path)
     elif extension == '.lrc':
         return load_lrc(file_path)
+    elif extension == '.stl':
+        return load_stl(file_path)  # STL support added
     else:
         raise ValueError(f"Unsupported file extension: {extension}")
+
+# Function to load STL files using pycaption and convert them to JSON structure
+def load_stl(file_path):
+    with open(file_path, 'rb') as stl_file:
+        stl_content = stl_file.read()
+    converter = CaptionConverter()
+    caption_set = converter.read(stl_content, EBUSTLReader())
+
+    # Convert the STL captions to a JSON structure
+    subtitles = []
+    for lang in caption_set.get_languages():
+        for caption in caption_set.get_captions(lang):
+            subtitles.append({
+                "start": format_caption_time(caption.start),
+                "end": format_caption_time(caption.end),
+                "text": caption.nodes[0].get_text() if caption.nodes else ""
+            })
+    return subtitles
+
+# Helper function to format caption time from pycaption (CaptionSet) to "HH:MM:SS,MS"
+def format_caption_time(timedelta_obj):
+    total_seconds = timedelta_obj.total_seconds()
+    hours, remainder = divmod(total_seconds, 3600)
+    minutes, seconds = divmod(remainder, 60)
+    milliseconds = int((seconds - int(seconds)) * 1000)
+    return f"{int(hours):02}:{int(minutes):02}:{int(seconds):02},{milliseconds:03}"
 
 # Function to load SRT files
 def load_srt(file_path):
@@ -146,28 +174,39 @@ def export_subtitle(subtitles, file_path):
         export_srt(subtitles, file_path)
     elif extension == '.vtt':
         export_vtt(subtitles, file_path)
-    elif extension == '.ass': # NOT WORKING IN VLC
+    elif extension == '.ass':
         export_ass(subtitles, file_path)
     elif extension == '.sbv':
         export_sbv(subtitles, file_path)
     elif extension == '.lrc':
         export_lrc(subtitles, file_path)
     elif extension == '.stl':
-        export_stl(subtitles, file_path)
+        export_stl(subtitles, file_path)  # STL support added
     else:
         raise ValueError(f"Unsupported file extension: {extension}")
 
-# Function to properly format the timecode for SRT (converting milliseconds with a comma)
-def format_timecode_srt(timecode_str):
-    # Convert timecode to use comma for milliseconds (SRT format)
-    return timecode_str.replace(".", ",")
+# Export STL (using pycaption from JSON structure back to STL)
+def export_stl(subtitles, file_path):
+    converter = CaptionConverter()
 
-# Function to convert a time string (HH:MM:SS,MS) to SubRipTime object
-def timecode_to_subrip_time(timecode_str):
-    timecode_str = format_timecode_srt(timecode_str)  # Ensure correct format with comma for milliseconds
-    hours, minutes, rest = timecode_str.split(":")
-    seconds, milliseconds = rest.split(",")
-    return SubRipTime(int(hours), int(minutes), int(seconds), int(milliseconds))
+    # Create a CaptionSet from the subtitles
+    caption_set = CaptionSet()
+    captions = []
+    for subtitle in subtitles:
+        start = parse_timecode(subtitle['start'])
+        end = parse_timecode(subtitle['end'])
+        captions.append({
+            "start": start,
+            "end": end,
+            "text": subtitle["text"]
+        })
+
+    # Convert the subtitle data into a CaptionSet
+    converter.captions = captions
+    stl_content = converter.write(EBUSTLWriter())
+
+    with open(file_path, 'wb') as stl_file_out:
+        stl_file_out.write(stl_content)
 
 # Export SRT
 def export_srt(subtitles, file_path):
@@ -203,22 +242,6 @@ def export_ass(subtitles, file_path):
         ass.events.append(event)
 
     ass.save(file_path)
-
-# Export STL (Spruce Subtitle Format)
-def export_stl(subtitles, file_path):
-    with open(file_path, 'wb') as file:
-        # A basic STL header (can be improved)
-        header = bytearray(1024)
-        header[0:3] = b'STL'
-        file.write(header)
-
-        for subtitle in subtitles:
-            # Example conversion for subtitle data (improvised for demo purposes)
-            start = parse_timecode(subtitle['start'])
-            end = parse_timecode(subtitle['end'])
-            text = subtitle['text'][:112]  # Limit to 112 chars for STL compatibility
-            entry = f"{start} --> {end}: {text}\n".encode('ascii')
-            file.write(entry)
 
 # Export SBV
 def export_sbv(subtitles, file_path):
