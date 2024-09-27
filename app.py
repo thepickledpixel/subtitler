@@ -1,7 +1,11 @@
 import os
 import sys
 import json
-import cv2  # For reading frame rate
+import cv2
+
+import numpy as np
+import matplotlib.pyplot as plt
+
 from PyQt6.QtWidgets import *
 from PyQt6.QtCore import *
 from PyQt6.QtGui import *
@@ -9,13 +13,9 @@ from PyQt6.QtGui import *
 from PyQt6.QtMultimedia import QMediaPlayer, QAudioOutput, QMediaDevices, QAudioSink
 from PyQt6.QtMultimediaWidgets import QVideoWidget
 
-
-from multiprocessing import Process
-
-import numpy as np
-import matplotlib.pyplot as plt
 from pydub import AudioSegment
 from io import BytesIO
+from multiprocessing import Process
 
 from gen_subs import *
 
@@ -24,7 +24,7 @@ if getattr(sys, 'frozen', False):
 else:
     runpath = os.path.abspath(os.path.dirname(__file__))
 
-max_subtitle_length = 200
+max_subtitle_length = 2000
 
 def crop_subtitle(subtitle):
     if len(subtitle) >= max_subtitle_length:
@@ -491,6 +491,10 @@ class VideoPlayer(QWidget):
         self.selectedSubtitle = None
         # self.allow_snapping = False
 
+        # Define a shortcut for the space bar
+        space_shortcut = QShortcut(QKeySequence("Space"), self)
+        space_shortcut.activated.connect(self.playPause)  # Bind the space bar to play/pause
+
         self.subtitleBox.mousePressEvent = self.onSubtitleClicked  # Link mouse press event to single click handler
         self.subtitleBox.mouseDoubleClickEvent = self.onSubtitleDoubleClicked
 
@@ -503,6 +507,56 @@ class VideoPlayer(QWidget):
             self.backward()  # Left arrow to rewind
         elif event.key() == Qt.Key.Key_Right:
             self.forward()  # Right arrow to fast forward
+
+    def adjustFontSizeToFit(self, text):
+        """
+        Adjust the font size of the subtitle text to fit within the QLabel box.
+        Reset the font size to 24 before adjusting, and then shrink if necessary.
+        """
+        font = self.subtitleBox.font()
+        font.setPointSize(24)  # Reset to default size (24)
+        self.subtitleBox.setFont(font)  # Apply the reset font to the subtitle box
+        font_metrics = QFontMetrics(font)
+
+        available_width = self.subtitleBox.width() - 10  # Adjust for padding
+        available_height = self.subtitleBox.height()
+
+        # Initialize line1 and line2
+        line1 = text
+        line2 = ""
+
+        # Split text into two lines
+        words = text.split()
+        if len(words) > 1:
+            # Try splitting the text into two roughly equal parts
+            mid = len(words) // 2
+            line1 = " ".join(words[:mid])
+            line2 = " ".join(words[mid:])
+            two_line_text = f"{line1}\n{line2}"
+        else:
+            # If only one word, use it as is
+            two_line_text = text
+
+        # Check if the two-line text fits
+        while font.pointSize() > 8:  # Minimum font size to avoid unreadable text
+            font_metrics = QFontMetrics(font)
+
+            # Calculate the width and height of the two-line text
+            text_width = max(font_metrics.horizontalAdvance(line1), font_metrics.horizontalAdvance(line2))
+            text_height = font_metrics.lineSpacing() * 2 if line2 else font_metrics.lineSpacing()
+
+            # If the two-line text fits within the box, stop reducing the font size
+            if text_width <= available_width and text_height <= available_height:
+                self.subtitleBox.setFont(font)
+                self.subtitleBox.setText(two_line_text)
+                return
+
+            # If it doesn't fit, reduce the font size
+            font.setPointSize(font.pointSize() - 1)
+
+        # If the text is still too big after reducing, just set the text with the smallest font size
+        self.subtitleBox.setFont(font)
+        self.subtitleBox.setText(two_line_text)
 
     def question_box(self, title, question):
         reply = QMessageBox.question(
@@ -585,7 +639,8 @@ class VideoPlayer(QWidget):
 
         # Update the displayed subtitle text in the subtitle box
         subtitle_text = self.getSubtitleForTime(position)
-        self.subtitleBox.setText(crop_subtitle(subtitle_text[:max_subtitle_length]))
+        self.adjustFontSizeToFit(crop_subtitle(subtitle_text))
+        self.subtitleBox.setText(crop_subtitle(subtitle_text))
 
     def onSubtitleClicked(self, event):
         """
@@ -726,7 +781,11 @@ class VideoPlayer(QWidget):
         if self.subtitleFilePath:
             try:
                 # Sort the subtitles by their start times (in milliseconds)
-                self.subtitles.sort(key=lambda sub: self.time_to_milliseconds(QTime.fromString(sub['start'], 'hh:mm:ss.zzz')))
+                self.subtitles.sort(
+                    key=lambda sub: self.time_to_milliseconds(
+                        QTime.fromString(sub['start'], 'hh:mm:ss.zzz')
+                    )
+                )
 
                 # Ensure no overlaps
                 for i in range(len(self.subtitles) - 1):
@@ -734,8 +793,12 @@ class VideoPlayer(QWidget):
                     next_sub = self.subtitles[i + 1]
 
                     # Convert start and end times to milliseconds
-                    current_end_ms = self.time_to_milliseconds(QTime.fromString(current_sub['end'], 'hh:mm:ss.zzz'))
-                    next_start_ms = self.time_to_milliseconds(QTime.fromString(next_sub['start'], 'hh:mm:ss.zzz'))
+                    current_end_ms = self.time_to_milliseconds(
+                        QTime.fromString(current_sub['end'], 'hh:mm:ss.zzz')
+                    )
+                    next_start_ms = self.time_to_milliseconds(
+                        QTime.fromString(next_sub['start'], 'hh:mm:ss.zzz')
+                    )
 
                     # If current subtitle's end time overlaps with the next subtitle's start time, truncate it
                     if current_end_ms >= next_start_ms:
@@ -897,7 +960,8 @@ class VideoPlayer(QWidget):
 
         self.currentSubtitle = self.getSubtitleForTime(position)
         # self.subtitleBox.setText(self.currentSubtitle)
-        self.subtitleBox.setText(crop_subtitle(self.currentSubtitle[:max_subtitle_length]))
+        self.adjustFontSizeToFit(crop_subtitle(self.currentSubtitle))
+        self.subtitleBox.setText(crop_subtitle(self.currentSubtitle))
 
     def highlightCurrentSubtitle(self, position):
         """
@@ -944,7 +1008,7 @@ class VideoPlayer(QWidget):
         if len(self.subtitleList) > 0:
             if not self.question_box(
                 "Overwrite Subtitles",
-                "Subtitles already exist, overwrite?"
+                "Subtitles exist, overwrite?"
             ):
                 return
 
@@ -975,13 +1039,13 @@ class VideoPlayer(QWidget):
 
     def onSubtitlesGenerated(self):
         try:
-            self.spinner.accept()  # Use accept to close the dialog correctly
+            self.spinner.accept()
 
             self.subtitleFilePath = os.path.splitext(self.currentFilePath)[0] + ".json"
 
             # Clear the subtitle playlist when loading a new video
-            self.subtitles = []  # Clear the subtitle data
-            self.populateSubtitleList()  # Clear the UI list
+            self.subtitles = []
+            self.populateSubtitleList()
 
             if os.path.exists(self.subtitleFilePath):
                 self.loadSubtitles()

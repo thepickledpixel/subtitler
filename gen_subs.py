@@ -54,7 +54,7 @@ def make_subtitles(input_filename):
                         data = {
                             "start": start_timecode,
                             "end": end_timecode,
-                            "text": segment.text
+                            "text": segment.text.strip()
                         }
                         json.dump(data, f, indent=4)
                         if i < len(segments_list) - 1:
