@@ -17,6 +17,7 @@ from pydub import AudioSegment
 from io import BytesIO
 from multiprocessing import Process
 
+from convert_subs import*
 from gen_subs import *
 
 if getattr(sys, 'frozen', False):
@@ -356,12 +357,12 @@ class VideoPlayer(QWidget):
         self.styleButton(openButton, double_width=True)
 
         importButton = QPushButton("Import Subs")
-        importButton.clicked.connect(self.openFile)
+        importButton.clicked.connect(self.importSubtitles)
         importButton.setFont(self.fonts.font)
         self.styleButton(importButton, double_width=True)
 
         exportButton = QPushButton("Export Subs")
-        exportButton.clicked.connect(self.openFile)
+        exportButton.clicked.connect(self.exportSubtitles)
         exportButton.setFont(self.fonts.font)
         self.styleButton(exportButton, double_width=True)
 
@@ -370,17 +371,6 @@ class VideoPlayer(QWidget):
         self.playButton.setIcon(self.style().standardIcon(QStyle.StandardPixmap.SP_MediaPlay))
         self.playButton.clicked.connect(self.playPause)
         self.styleButton(self.playButton)
-
-        # # Frame-by-Frame Buttons
-        # frameForwardButton = QPushButton("+ 10")
-        # frameForwardButton.clicked.connect(self.stepFrameForward)
-        # frameForwardButton.setFont(self.fonts.font)
-        # self.styleButton(frameForwardButton, double_width=False)
-
-        # frameBackwardButton = QPushButton("- 10")
-        # frameBackwardButton.clicked.connect(self.stepFrameBackward)
-        # frameBackwardButton.setFont(self.fonts.font)
-        # self.styleButton(frameBackwardButton, double_width=False)
 
         # Fast Forward and Rewind Buttons
         forwardButton = QPushButton()
@@ -405,7 +395,7 @@ class VideoPlayer(QWidget):
         hideListButton.setFixedWidth(120)  # You can adjust the width
 
         # Timecode Label
-        self.timecodeLabel = QLabel("00:00:00,000")
+        self.timecodeLabel = QLabel("00:00:00.000")
         self.timecodeLabel.setStyleSheet("background-color: dark grey; color: white; padding: 0 10px;")
         timecode_font = QFont(self.fonts.mono_font)
         timecode_font.setPointSize(24)
@@ -639,6 +629,63 @@ class VideoPlayer(QWidget):
             else:
                 self.saveSubtitles()
 
+    def importSubtitles(self):
+        """
+        Open a video file and load the corresponding subtitle file if it exists,
+        or create an empty subtitle file if it doesn't.
+        """
+        if not self.currentFilePath:
+            print("No video loaded")
+            return
+
+        fileName, _ = QFileDialog.getOpenFileName(self, "Import subtitle File", "", "Subtitle Files (*.srt *.vtt *.ass *.sbv *.lrc *.stl)")
+        if fileName:
+
+            if len(self.subtitleList) > 0:
+                if not self.question_box(
+                    "Overwrite Subtitles",
+                    "Subtitles exist, overwrite?"
+                ):
+                    return
+
+            # Clear the subtitle playlist when loading a new video
+            self.subtitles = load_subtitle(fileName)
+            self.populateSubtitleList()  # Clear the UI list
+
+            self.subtitleFilePath = os.path.splitext(self.currentFilePath)[0] + ".json"
+            self.saveSubtitles()
+
+    def exportSubtitles(self):
+        if not self.currentFilePath:
+            print("No video loaded")
+            return
+
+        fileName, selectedFilter = QFileDialog.getSaveFileName(
+            self,
+            "Save Subtitle File",
+            os.path.splitext(self.currentFilePath)[0],  # Set default file name
+            "SRT File (*.srt);;VTT File (*.vtt);;ASS File (*.ass);;SBV File (*.sbv);;LRC File (*.lrc);;STL File (*.stl)",  # File format options
+            options=QFileDialog.Option.DontUseNativeDialog  # Optional, to avoid native dialogs
+        )
+
+        if fileName:
+            # Automatically append the correct extension if not provided
+            if selectedFilter == "SRT File (*.srt)" and not fileName.lower().endswith(".srt"):
+                fileName += ".srt"
+            elif selectedFilter == "VTT File (*.vtt)" and not fileName.lower().endswith(".vtt"):
+                fileName += ".vtt"
+            elif selectedFilter == "ASS File (*.ass)" and not fileName.lower().endswith(".ass"):
+                fileName += ".ass"
+            elif selectedFilter == "SBV File (*.sbv)" and not fileName.lower().endswith(".sbv"):
+                fileName += ".sbv"
+            elif selectedFilter == "LRC File (*.lrc)" and not fileName.lower().endswith(".lrc"):
+                fileName += ".lrc"
+            elif selectedFilter == "STL File (*.stl)" and not fileName.lower().endswith(".stl"):
+                fileName += ".stl"
+
+            export_subtitle(self.subtitles, fileName)
+
+
     def populateSubtitleList(self):
         """
         Populate the subtitle list widget from the subtitles.
@@ -662,22 +709,6 @@ class VideoPlayer(QWidget):
         except TypeError:
             pass
         self.subtitleList.itemDoubleClicked.connect(self.editSubtitle)
-
-    def updateTimecode(self, position=None):
-        """
-        Update the timecode and display the currently playing subtitle.
-        """
-        if position is None:
-            position = self.mediaPlayer.position()
-
-        time = QTime(0, 0, 0).addMSecs(position)
-        timecode = f'{time.hour():02}:{time.minute():02}:{time.second():02},{time.msec():03}'
-        self.timecodeLabel.setText(timecode)
-
-        # Update the displayed subtitle text in the subtitle box
-        subtitle_text = self.getSubtitleForTime(position)
-        self.adjustFontSizeToFit(crop_subtitle(subtitle_text))
-        self.subtitleBox.setText(crop_subtitle(subtitle_text))
 
     def onSubtitleClicked(self, event):
         """
@@ -992,7 +1023,7 @@ class VideoPlayer(QWidget):
             position = self.mediaPlayer.position()
 
         time = QTime(0, 0, 0).addMSecs(position)
-        timecode = f'{time.hour():02}:{time.minute():02}:{time.second():02},{time.msec():03}'
+        timecode = f'{time.hour():02}:{time.minute():02}:{time.second():02}.{time.msec():03}'
         self.timecodeLabel.setText(timecode)
 
         self.currentSubtitle = self.getSubtitleForTime(position)

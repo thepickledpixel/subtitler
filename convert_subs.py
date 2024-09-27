@@ -5,7 +5,7 @@ import sys
 import webvtt
 import argparse
 from datetime import timedelta
-from pycaption import CaptionConverter, EBUSTLReader, EBUSTLWriter, CaptionSet
+# from pycaption import CaptionConverter, EBUSTLReader, EBUSTLWriter, CaptionSet
 from pysrt import SubRipFile, SubRipItem, SubRipTime
 from pysubs2 import SSAFile, SSAEvent
 
@@ -23,13 +23,13 @@ def parse_timecode(timecode):
     hours = int(parts[-3])
     return timedelta(hours=hours, minutes=minutes, seconds=seconds)
 
-# Function to convert timecodes to string (from timedelta)
+# Function to convert timecodes to string (from timedelta) ensuring the right format
 def format_timecode(subrip_time):
     hours = subrip_time.hours
     minutes = subrip_time.minutes
     seconds = subrip_time.seconds
     milliseconds = subrip_time.milliseconds
-    return f"{hours:02}:{minutes:02}:{seconds:02},{milliseconds:03}"
+    return f"{hours:02}:{minutes:02}:{seconds:02}.{milliseconds:03}"  # Use . for milliseconds
 
 # Load subtitle based on extension
 def load_subtitle(file_path):
@@ -68,13 +68,13 @@ def load_stl(file_path):
             })
     return subtitles
 
-# Helper function to format caption time from pycaption (CaptionSet) to "HH:MM:SS,MS"
+# Helper function to format caption time from timedelta object to "HH:MM:SS.MMM"
 def format_caption_time(timedelta_obj):
     total_seconds = timedelta_obj.total_seconds()
     hours, remainder = divmod(total_seconds, 3600)
     minutes, seconds = divmod(remainder, 60)
     milliseconds = int((seconds - int(seconds)) * 1000)
-    return f"{int(hours):02}:{int(minutes):02}:{int(seconds):02},{milliseconds:03}"
+    return f"{int(hours):02}:{int(minutes):02}:{int(seconds):02}.{milliseconds:03}"  # Use . for milliseconds
 
 # Function to load SRT files
 def load_srt(file_path):
@@ -94,8 +94,8 @@ def load_vtt(file_path):
     subtitles = []
     for caption in vtt:
         subtitles.append({
-            "start": caption.start,
-            "end": caption.end,
+            "start": format_caption_time(parse_timecode(caption.start.replace(",", "."))),  # Ensure proper format
+            "end": format_caption_time(parse_timecode(caption.end.replace(",", "."))),  # Ensure proper format
             "text": caption.text.replace('\n', ' ')
         })
     return subtitles
@@ -106,8 +106,8 @@ def load_ass(file_path):
     subtitles = []
     for line in ass.events:
         subtitles.append({
-            "start": str(timedelta(seconds=line.start)),
-            "end": str(timedelta(seconds=line.end)),
+            "start": format_caption_time(timedelta(seconds=line.start)),
+            "end": format_caption_time(timedelta(seconds=line.end)),
             "text": line.text.strip().replace('\n', ' ')
         })
     return subtitles
@@ -122,7 +122,10 @@ def load_sbv(file_path):
     text_lines = []
 
     for line in content:
-        if re.match(r"\d+:\d+:\d+.\d+,\d+:\d+:\d+.\d+", line):
+        line = line.strip()
+        # Match timecode lines in SBV format (e.g., 0:00:12.345,0:00:14.678)
+        if re.match(r"\d+:\d+:\d+\.\d+,\d+:\d+:\d+\.\d+", line):
+            # If we already have a start_time and text, save the previous subtitle
             if start_time and text_lines:
                 subtitles.append({
                     "start": start_time,
@@ -130,12 +133,13 @@ def load_sbv(file_path):
                     "text": ' '.join(text_lines).strip()
                 })
             times = line.split(',')
-            start_time = times[0].strip()
-            end_time = times[1].strip()
-            text_lines = []
+            start_time = format_caption_time(parse_timecode(times[0].strip()))
+            end_time = format_caption_time(parse_timecode(times[1].strip()))
+            text_lines = []  # Clear text for the next subtitle
         else:
-            text_lines.append(line.strip())
+            text_lines.append(line)
 
+    # Add the final subtitle
     if start_time and text_lines:
         subtitles.append({
             "start": start_time,
@@ -158,10 +162,10 @@ def load_lrc(file_path):
             seconds = float(match.group(2))
             start_time = timedelta(minutes=minutes, seconds=seconds)
             text = match.group(3).strip()
-            end_time = start_time + timedelta(seconds=2)  # Just assuming 2 seconds for simplicity
+            end_time = start_time + timedelta(seconds=2)  # Assuming a fixed 2-second duration for simplicity
             subtitles.append({
-                "start": str(start_time),
-                "end": str(end_time),
+                "start": format_caption_time(start_time),
+                "end": format_caption_time(end_time),
                 "text": text
             })
     return subtitles
@@ -207,6 +211,18 @@ def export_stl(subtitles, file_path):
 
     with open(file_path, 'wb') as stl_file_out:
         stl_file_out.write(stl_content)
+
+# Function to properly format the timecode for SRT (converting milliseconds with a comma)
+def format_timecode_srt(timecode_str):
+    # Convert timecode to use comma for milliseconds (SRT format)
+    return timecode_str.replace(".", ",")
+
+# Function to convert a time string (HH:MM:SS,MS) to SubRipTime object
+def timecode_to_subrip_time(timecode_str):
+    timecode_str = format_timecode_srt(timecode_str)  # Ensure correct format with comma for milliseconds
+    hours, minutes, rest = timecode_str.split(":")
+    seconds, milliseconds = rest.split(",")
+    return SubRipTime(int(hours), int(minutes), int(seconds), int(milliseconds))
 
 # Export SRT
 def export_srt(subtitles, file_path):
