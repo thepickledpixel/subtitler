@@ -601,7 +601,19 @@ class VideoPlayer(QWidget):
         Open a video file and load the corresponding subtitle file if it exists,
         or create an empty subtitle file if it doesn't.
         """
-        fileName, _ = QFileDialog.getOpenFileName(self, "Open Media File", "", "Video Files (*.mp4 *.avi *.mkv *.mov)")
+        if self.currentFilePath:
+            if os.path.exists(self.currentFilePath):
+                default_path = os.path.dirname(self.currentFilePath)
+        else:
+            default_path = os.path.dirname(runpath)
+
+        fileName, _ = QFileDialog.getOpenFileName(
+            self,
+            "Open Media File",
+            default_path,
+            "Video Files (*.mp4 *.avi *.mkv *.mov *.mxf)",
+            options=QFileDialog.Option.DontUseNativeDialog
+        )
         if fileName:
             self.currentFilePath = fileName
             self.mediaPlayer.setSource(QUrl.fromLocalFile(fileName))
@@ -638,7 +650,18 @@ class VideoPlayer(QWidget):
             print("No video loaded")
             return
 
-        fileName, _ = QFileDialog.getOpenFileName(self, "Import subtitle File", "", "Subtitle Files (*.srt *.vtt *.ass *.sbv *.lrc *.stl)")
+        if self.currentFilePath and os.path.exists(self.currentFilePath):
+            default_path = os.path.dirname(self.currentFilePath)
+        else:
+            default_path = os.path.dirname(runpath)
+
+        fileName, _ = QFileDialog.getOpenFileName(
+            self,
+            "Import subtitle File",
+            default_path,
+            "Subtitle Files (*.srt *.vtt *.ass *.sbv *.lrc *.stl)",
+            options=QFileDialog.Option.DontUseNativeDialog
+        )
         if fileName:
 
             if len(self.subtitleList) > 0:
@@ -664,23 +687,23 @@ class VideoPlayer(QWidget):
             self,
             "Save Subtitle File",
             os.path.splitext(self.currentFilePath)[0],  # Set default file name
-            "SRT File (*.srt);;VTT File (*.vtt);;ASS File (*.ass);;SBV File (*.sbv);;LRC File (*.lrc);;STL File (*.stl)",  # File format options
-            options=QFileDialog.Option.DontUseNativeDialog  # Optional, to avoid native dialogs
+            "SRT (*.srt);;VTT (*.vtt);;ASS (*.ass);;SBV (*.sbv);;LRC (*.lrc);;STL (*.stl)",  # File format options
+            options=QFileDialog.Option.DontUseNativeDialog
         )
 
         if fileName:
             # Automatically append the correct extension if not provided
-            if selectedFilter == "SRT File (*.srt)" and not fileName.lower().endswith(".srt"):
+            if selectedFilter == "SRT (*.srt)" and not fileName.lower().endswith(".srt"):
                 fileName += ".srt"
-            elif selectedFilter == "VTT File (*.vtt)" and not fileName.lower().endswith(".vtt"):
+            elif selectedFilter == "VTT (*.vtt)" and not fileName.lower().endswith(".vtt"):
                 fileName += ".vtt"
-            elif selectedFilter == "ASS File (*.ass)" and not fileName.lower().endswith(".ass"):
+            elif selectedFilter == "ASS (*.ass)" and not fileName.lower().endswith(".ass"):
                 fileName += ".ass"
-            elif selectedFilter == "SBV File (*.sbv)" and not fileName.lower().endswith(".sbv"):
+            elif selectedFilter == "SBV (*.sbv)" and not fileName.lower().endswith(".sbv"):
                 fileName += ".sbv"
-            elif selectedFilter == "LRC File (*.lrc)" and not fileName.lower().endswith(".lrc"):
+            elif selectedFilter == "LRC (*.lrc)" and not fileName.lower().endswith(".lrc"):
                 fileName += ".lrc"
-            elif selectedFilter == "STL File (*.stl)" and not fileName.lower().endswith(".stl"):
+            elif selectedFilter == "STL (*.stl)" and not fileName.lower().endswith(".stl"):
                 fileName += ".stl"
 
             export_subtitle(self.subtitles, fileName)
@@ -825,15 +848,6 @@ class VideoPlayer(QWidget):
             del self.subtitles[selected_row]
             self.populateSubtitleList()
             self.saveSubtitles()  # Save the updated subtitles
-
-    def loadSubtitlesManually(self):
-        """
-        Manually load subtitles via the button.
-        """
-        fileName, _ = QFileDialog.getOpenFileName(self, "Open Subtitles File", "", "Subtitle Files (*.json)")
-        if fileName:
-            self.subtitleFilePath = fileName  # Set the subtitle file path to the manually loaded file
-            self.loadSubtitles()  # Load the selected subtitle file
 
     # Helper function to get milliseconds from QTime
     def time_to_milliseconds(self, qtime):

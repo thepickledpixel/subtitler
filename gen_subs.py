@@ -40,7 +40,10 @@ def make_subtitles(input_filename):
 
             # Transcribe audio
             audio_file = input_filename
-            segments, _ = model.transcribe(audio_file, beam_size=5)  # segments is a generator
+
+            options = {"language": "auto", "translate": "en"}
+
+            segments, _ = model.transcribe(audio_file, beam_size=5, task="translate")  # segments is a generator
 
             # Convert generator to a list
             segments_list = list(segments)

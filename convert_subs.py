@@ -100,14 +100,27 @@ def load_vtt(file_path):
         })
     return subtitles
 
+def format_ass_caption_time(td):
+    # Assuming you want to format time as h:mm:ss,sss
+    hours, remainder = divmod(td.total_seconds(), 3600)
+    minutes, seconds = divmod(remainder, 60)
+    milliseconds = int((seconds - int(seconds)) * 1000)
+    formatted_time = "{:02}:{:02}:{:02}.{:03}".format(
+        int(hours), int(minutes), int(seconds), milliseconds)
+    return formatted_time
+
 # Function to load ASS/SSA files
 def load_ass(file_path):
     ass = SSAFile.load(file_path)
     subtitles = []
     for line in ass.events:
+        # Convert milliseconds to seconds for timedelta
+        start_seconds = line.start / 1000.0
+        end_seconds = line.end / 1000.0
+
         subtitles.append({
-            "start": format_caption_time(timedelta(seconds=line.start)),
-            "end": format_caption_time(timedelta(seconds=line.end)),
+            "start": format_ass_caption_time(timedelta(seconds=start_seconds)),
+            "end": format_ass_caption_time(timedelta(seconds=end_seconds)),
             "text": line.text.strip().replace('\n', ' ')
         })
     return subtitles
@@ -246,15 +259,21 @@ def export_vtt(subtitles, file_path):
             file.write(f"{subtitle['start']} --> {subtitle['end']}\n")
             file.write(f"{subtitle['text']}\n\n")
 
+def parse_ass_timecode(time_string):
+    # Assuming time_string is in the format "0:00:00.00"
+    h, m, s = map(float, time_string.split(':'))
+    total_ms = int(h * 3600000 + m * 60000 + s * 1000)
+    return total_ms
+
 # Export ASS (with SSAEvent conversion)
 def export_ass(subtitles, file_path):
     ass = SSAFile()
     for subtitle in subtitles:
-        start = parse_timecode(subtitle['start']).total_seconds()
-        end = parse_timecode(subtitle['end']).total_seconds()
+        start_ms = parse_ass_timecode(subtitle['start'])
+        end_ms = parse_ass_timecode(subtitle['end'])
 
         # Create SSAEvent for each subtitle
-        event = SSAEvent(start=start, end=end, text=subtitle['text'])
+        event = SSAEvent(start=start_ms, end=end_ms, text=subtitle['text'])
         ass.events.append(event)
 
     ass.save(file_path)
