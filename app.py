@@ -611,7 +611,7 @@ class VideoPlayer(QWidget):
             self,
             "Open Media File",
             default_path,
-            "Video Files (*.mp4 *.avi *.mkv *.mov *.mxf)",
+            "Video Files (*.mp4 *.m4v *.avi *.mkv *.mov *.mxf)",
             options=QFileDialog.Option.DontUseNativeDialog
         )
         if fileName:
@@ -659,7 +659,7 @@ class VideoPlayer(QWidget):
             self,
             "Import subtitle File",
             default_path,
-            "Subtitle Files (*.srt *.vtt *.ass *.sbv *.lrc *.stl)",
+            "Subtitle Files (*.srt *.vtt *.ass *.sbv *.stl)",
             options=QFileDialog.Option.DontUseNativeDialog
         )
         if fileName:
@@ -687,7 +687,7 @@ class VideoPlayer(QWidget):
             self,
             "Save Subtitle File",
             os.path.splitext(self.currentFilePath)[0],  # Set default file name
-            "SRT (*.srt);;VTT (*.vtt);;ASS (*.ass);;SBV (*.sbv);;LRC (*.lrc);;STL (*.stl)",  # File format options
+            "SRT (*.srt);;VTT (*.vtt);;ASS (*.ass);;SBV (*.sbv);;STL (*.stl)",  # File format options
             options=QFileDialog.Option.DontUseNativeDialog
         )
 
@@ -701,8 +701,6 @@ class VideoPlayer(QWidget):
                 fileName += ".ass"
             elif selectedFilter == "SBV (*.sbv)" and not fileName.lower().endswith(".sbv"):
                 fileName += ".sbv"
-            elif selectedFilter == "LRC (*.lrc)" and not fileName.lower().endswith(".lrc"):
-                fileName += ".lrc"
             elif selectedFilter == "STL (*.stl)" and not fileName.lower().endswith(".stl"):
                 fileName += ".stl"
 
@@ -894,27 +892,6 @@ class VideoPlayer(QWidget):
 
             except Exception as e:
                 print(f"Error saving subtitles: {e}")
-
-    # def populateSubtitleList(self):
-    #     """
-    #     Populate the subtitle list widget from the subtitles.
-    #     Clears the list if no subtitles are available.
-    #     """
-    #     self.subtitleList.clear()  # Clear the list first
-    #     for index, subtitle in enumerate(self.subtitles):
-    #         widget = SubtitleWidget(subtitle["start"], subtitle["end"], subtitle["text"])
-    #         item = QListWidgetItem(self.subtitleList)
-    #         item.setSizeHint(widget.sizeHint())
-    #         item.setForeground(QColor('white'))
-    #         self.subtitleList.setItemWidget(item, widget)
-    #
-    #     try:
-    #         self.subtitleList.itemDoubleClicked.disconnect(self.editSubtitle)
-    #     except TypeError:
-    #         pass  # Signal was not connected before, so nothing to disconnect
-    #
-    #     self.subtitleList.itemDoubleClicked.connect(self.editSubtitle)
-    #     self.subtitleList.itemClicked.connect(self.selectSubtitle)
 
     def selectSubtitle(self, item):
         """

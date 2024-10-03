@@ -43,8 +43,6 @@ def load_subtitle(file_path):
         return load_ass(file_path)
     elif extension == '.sbv':
         return load_sbv(file_path)
-    elif extension == '.lrc':
-        return load_lrc(file_path)
     elif extension == '.stl':
         return load_stl(file_path)  # STL support added
     else:
@@ -162,27 +160,6 @@ def load_sbv(file_path):
 
     return subtitles
 
-# Function to load LRC files
-def load_lrc(file_path):
-    with open(file_path, 'r') as file:
-        content = file.readlines()
-
-    subtitles = []
-    for line in content:
-        match = re.match(r"\[(\d+):(\d+\.\d+)\](.+)", line)
-        if match:
-            minutes = int(match.group(1))
-            seconds = float(match.group(2))
-            start_time = timedelta(minutes=minutes, seconds=seconds)
-            text = match.group(3).strip()
-            end_time = start_time + timedelta(seconds=2)  # Assuming a fixed 2-second duration for simplicity
-            subtitles.append({
-                "start": format_caption_time(start_time),
-                "end": format_caption_time(end_time),
-                "text": text
-            })
-    return subtitles
-
 # Export subtitle into any supported format
 def export_subtitle(subtitles, file_path):
     extension = os.path.splitext(file_path)[1].lower()
@@ -195,8 +172,6 @@ def export_subtitle(subtitles, file_path):
         export_ass(subtitles, file_path)
     elif extension == '.sbv':
         export_sbv(subtitles, file_path)
-    elif extension == '.lrc':
-        export_lrc(subtitles, file_path)
     elif extension == '.stl':
         export_stl(subtitles, file_path)  # STL support added
     else:
@@ -284,14 +259,6 @@ def export_sbv(subtitles, file_path):
         for subtitle in subtitles:
             file.write(f"{subtitle['start']},{subtitle['end']}\n")
             file.write(f"{subtitle['text']}\n\n")
-
-# Export LRC
-def export_lrc(subtitles, file_path):
-    with open(file_path, 'w') as file:
-        for subtitle in subtitles:
-            start = parse_timecode(subtitle['start'])
-            minutes, seconds = divmod(start.total_seconds(), 60)
-            file.write(f"[{int(minutes)}:{seconds:.2f}]{subtitle['text']}\n")
 
 def export_json(input_file, output_file):
     subtitles = load_subtitle(input_file)
