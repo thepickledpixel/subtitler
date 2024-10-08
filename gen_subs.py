@@ -78,46 +78,48 @@ def detect_non_speech(audio_path, aggressiveness=2, frame_duration_ms=30):
 
         timestamp = current_time  # Update the frame timestamp
 
+    print(f"NON SPEECH SEGMENTS {non_speech_segments}")
+
     return non_speech_segments, audio_path
 
-def make_subtitles(audio_path):
+def make_subtitles(input_file):
     """Generate subtitles for a given audio file, optionally adjusting for non-speech segments."""
     try:
-        if os.path.isfile(audio_path):
+        audio_path = extract_audio(input_file)
 
-            audio_path = extract_audio(input_filename)
+        non_speech_segments, processed_audio_path = detect_non_speech(audio_path)
 
-            non_speech_segments, processed_audio_path = detect_non_speech(audio_path)
+        srt_filename = os.path.splitext(os.path.basename(input_file))[0] + ".json"
+        export_srtfilename = os.path.join(os.path.dirname(input_file), srt_filename)
 
-            srt_filename = os.path.splitext(os.path.basename(audio_path))[0] + ".json"
-            export_srtfilename = os.path.join(os.path.dirname(audio_path), srt_filename)
+        model = WhisperModel("base", device="cpu", compute_type="int8")
+        logger.info("Transcribing audio with Whisper...")
+        segments, _ = model.transcribe(input_file, beam_size=5)
 
-            model = WhisperModel("base", device="cpu", compute_type="int8")
-            logger.info("Transcribing audio with Whisper...")
-            segments, _ = model.transcribe(audio_path, beam_size=5)
+        segments_list = list(segments)
 
-            segments_list = list(segments)
+        subtitles = [
+            {
+                "start": format_timestamp(segment.start),
+                "end": format_timestamp(segment.end),
+                "text": segment.text.strip()
+            }
+            for segment in segments_list
+        ]
 
-            subtitles = [
-                {
-                    "start": format_timestamp(segment.start),
-                    "end": format_timestamp(segment.end),
-                    "text": segment.text.strip()
-                }
-                for segment in segments_list
-            ]
+        print(f"SUBTITLES PRE MIXING {subtitles}")
 
-            if non_speech_segments:
-                logger.info("Adjusting subtitles based on non-speech segments.")
-                subtitles = adjust_subtitles(non_speech_segments, subtitles)
+        if non_speech_segments:
+            logger.info("Adjusting subtitles based on non-speech segments.")
+            subtitles = adjust_subtitles(non_speech_segments, subtitles)
 
-            with open(export_srtfilename, "w") as f:
-                json.dump(subtitles, f, indent=4)
+        with open(export_srtfilename, "w") as f:
+            json.dump(subtitles, f, indent=4)
 
-            gc.collect()
+        gc.collect()
 
-            if os.path.exists(processed_audio_path):
-                os.remove(processed_audio_path)
+        if os.path.exists(processed_audio_path):
+            os.remove(processed_audio_path)
 
     except Exception as e:
         logger.error(f"Error generating subtitles: {e}")
@@ -164,10 +166,4 @@ if __name__ == "__main__":
         logger.info(f"File {input_filename} does not exist.")
         sys.exit(1)
 
-    #
-    # if audio_path:
-    #     non_speech_segments, processed_audio_path = detect_non_speech(audio_path)
     make_subtitles(input_filename)
-
-        # if os.path.exists(processed_audio_path):
-        #     os.remove(processed_audio_path)
