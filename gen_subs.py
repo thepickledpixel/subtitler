@@ -53,7 +53,7 @@ def make_subtitles(input_filename):
             export_srtfilename = os.path.join(os.path.dirname(input_filename), srt_filename)
 
             # Load the Whisper model with whisper_timestamped
-            model = whisper_timestamped.load_model("base", device="cpu")
+            model = whisper_timestamped.load_model("large", device="cpu")
 
             # Transcribe audio with word-level timestamps and apply VAD
             options = {
