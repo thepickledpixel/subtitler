@@ -107,7 +107,6 @@ class SubtitleWorker:
         self.process = None
 
     def start(self):
-        # Start the external process (replace `make_subtitles` with your actual script)
         self.process = Process(target=make_subtitles, args=(self.file_path,))
         self.process.start()
 

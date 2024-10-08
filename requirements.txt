@@ -2,3 +2,10 @@ pysrt
 webvtt-py
 pysubs2
 pycaption
+moviepy
+torchaudio
+torch
+silero-vad
+pyaudioanalysis
+
+ffmpeg

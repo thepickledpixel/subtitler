@@ -5,7 +5,6 @@ import sys
 import webvtt
 import argparse
 from datetime import timedelta
-# from pycaption import CaptionConverter, EBUSTLReader, EBUSTLWriter, CaptionSet
 from pysrt import SubRipFile, SubRipItem, SubRipTime
 from pysubs2 import SSAFile, SSAEvent
 

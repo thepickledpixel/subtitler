@@ -1,0 +1,4 @@
+myenv/
+pretrained_model_checkpoints/
+tmp_vad_model/
+*.wav
