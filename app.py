@@ -73,7 +73,6 @@ class SpinnerDialog(QDialog):
 
         self.setLayout(layout)
 
-
     def styleButton(self, button):
         width = 100 # Doubled the width for Sub IN/OUT buttons
         height = 40

@@ -41,58 +41,60 @@ def convert_timecode(timecode):
     return f"{hours:02d}:{minutes:02d}:{seconds:02d}.{milliseconds:03d}"
 
 def make_subtitles(input_filename):
-    try:
-        if os.path.isfile(input_filename):
-            # Extract audio from the video file
-            audio_path = extract_audio(input_filename)
-            if not audio_path:
-                logger.error("Audio extraction failed.")
-                return
 
-            srt_filename = os.path.splitext(os.path.basename(input_filename))[0] + ".json"
-            export_srtfilename = os.path.join(os.path.dirname(input_filename), srt_filename)
+    if os.path.isfile(input_filename):
+        # Extract audio from the video file
+        audio_path = extract_audio(input_filename)
+        if not audio_path:
+            logger.error("Audio extraction failed.")
+            return
 
-            # Load the Whisper model with whisper_timestamped
-            model = whisper_timestamped.load_model("large", device="cpu")
+        srt_filename = os.path.splitext(os.path.basename(input_filename))[0] + ".json"
+        export_srtfilename = os.path.join(os.path.dirname(input_filename), srt_filename)
 
-            # Transcribe audio with word-level timestamps and apply VAD
-            options = {
-                "language": "en",
-                "trust_whisper_timestamps": False,
-                "use_backend_timestamps": True,
-                "verbose": True,
-                "refine_whisper_precision": 0.5,
-                "naive_approach": True,
-                "vad": "auditok"  # Enable VAD to remove non-speech segments
-            }
-            results = whisper_timestamped.transcribe(model, audio_path, **options)
-            segments_list = results['segments']  # Extract segments with detailed word timestamps
+        # Load the Whisper model with whisper_timestamped
+        model = whisper_timestamped.load_model("medium", device="cpu")
 
-            # Write output to JSON
+        # Transcribe audio with word-level timestamps and apply VAD
+        options = {
+            "language": "en",
+            "trust_whisper_timestamps": True,
+            "use_backend_timestamps": True,
+            "verbose": True,
+            "refine_whisper_precision": 0.5,
+            "naive_approach": True,
+            "vad": "auditok"  # Enable VAD to remove non-speech segments
+        }
+        results = whisper_timestamped.transcribe(model, audio_path, **options)
+        segments_list = results['segments']  # Extract segments with detailed word timestamps
+
+        try:
             if segments_list:
-                with open(export_srtfilename, "w") as f:
-                    f.write("[\n")  # Start of array
-                    for i, segment in enumerate(segments_list):
-                        start_timecode = convert_timecode(segment['start'])
-                        end_timecode = convert_timecode(segment['end'])
-                        text = segment['text'].strip()
+                # Build the list of subtitle data
+                subtitles = []
+                for segment in segments_list:
+                    start_timecode = convert_timecode(segment['start'])
+                    end_timecode = convert_timecode(segment['end'])
+                    text = segment['text'].strip()
 
-                        # Create dictionary to store subtitle data
-                        data = {
+                    # Skip empty captions
+                    if text:
+                        # Append the dictionary to the list
+                        subtitles.append({
                             "start": start_timecode,
                             "end": end_timecode,
                             "text": text
-                        }
-                        print(data)  # For debugging
-                        json.dump(data, f, indent=4)
-                        if i < len(segments_list) - 1:
-                            f.write(",\n")  # Add a comma after each item except the last
-                    f.write("\n]")  # End of array
+                        })
+
+                # Write the entire list to a JSON file
+                with open(export_srtfilename, "w") as f:
+                    json.dump(subtitles, f, indent=4)
+
             else:
                 logger.info("No transcriptions generated.")
-    except Exception as e:
-        logger.error(f"Error generating subtitles: {e}")
-        return
+
+        except Exception as e:
+            logger.error(f"Error generating subtitles: {e}")
 
 if __name__ == "__main__":
     if len(sys.argv) < 2:
